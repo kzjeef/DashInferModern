@@ -16,6 +16,7 @@ from .qwen_v15 import *
 from .qwen_v20 import *
 from .qwencode_v20 import *
 from .qwen_v20_moe import *
+from .deepseek_v3 import *
 __all__ = [
     "LLaMA",
     "LLaMA_v2",
@@ -30,5 +31,6 @@ __all__ = [
     "Qwen_v15",
     "Qwen_v20",
     "QwenCode_v20",
-    "Qwen_v20_MOE"
+    "Qwen_v20_MOE",
+    "DeepSeek_v3"
 ]
