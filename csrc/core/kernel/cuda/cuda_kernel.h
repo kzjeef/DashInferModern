@@ -433,5 +433,42 @@ void SoftmaxLowReduceKernelLauncher(const T* input, T* output, int out_dim,
 void GetExpertByIndice(int* expert_indices, const int* in_expert_indices,
                        const int* row_indices, int total_token, int topk,
                        int num_expert, cudaStream_t stream);
+
+template <typename T>
+void MLAKVAssembleLauncher(T* k_assembled, T* v_assembled, const T* kv_full,
+                           const T* k_rope, int total_tokens, int num_heads,
+                           int d_nope, int d_rope, int d_v,
+                           int k_rope_stride, cudaStream_t stream);
+
+template <typename T>
+void MLAStridedRoPEKLauncher(T* kv_compressed, const float* inv_freq,
+                             const int* step_list, int total_tokens,
+                             int d_rope, int kv_lora_rank,
+                             int position_offset,
+                             cudaStream_t stream);
+
+template <typename T>
+void MLACopyToSpanCacheLauncher(T* const* span_ptrs, const T* kv_compressed,
+                                int total_tokens, int kv_dim, int span_len,
+                                int start_pos, cudaStream_t stream);
+
+template <typename T>
+void MLARoPEQLauncher(T* q, const float* inv_freq, const int* step_list,
+                      const int* batch_token_offsets, int total_tokens,
+                      int num_heads, int d_nope, int d_rope, int seq_len,
+                      int position_offset,
+                      cudaStream_t stream);
+
+template <typename T>
+void MLARoPEKLauncher(T* k_rope, const float* inv_freq, const int* step_list,
+                      int total_tokens, int d_rope, cudaStream_t stream);
+
+void GroupedTopKKernelLauncher(const float* gate_input,
+                               const float* routing_bias,
+                               float* expert_score, int* expert_index,
+                               int total_token, int num_expert, int num_group,
+                               int top_k_group, int top_k,
+                               float routed_scaling_factor,
+                               cudaStream_t stream);
 }  // namespace cuda
 }  // namespace allspark
