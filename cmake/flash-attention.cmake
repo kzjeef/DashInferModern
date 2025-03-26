@@ -22,7 +22,7 @@ set(FLASHATTN_USE_STATIC_LIB
     ON
     CACHE BOOL "use flash-attn static lib")
 
-set(TARGET_HEADDIM_LIST "128" CACHE STRING "List of target HEADDIM values (overrides ALLOWED_HEADDIMS_LIST)")
+set(TARGET_HEADDIM_LIST "128;192" CACHE STRING "List of target HEADDIM values (overrides ALLOWED_HEADDIMS_LIST)")
 
 # only static link when needed, to reduce size.
 if(ENABLE_NV_STATIC_LIB)
