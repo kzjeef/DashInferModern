@@ -417,5 +417,131 @@ void GetExpertByIndice(int* expert_indices, const int* in_expert_indices,
       N, expert_indices, in_expert_indices, row_indices, total_token, topk,
       num_expert);
 }
+
+// DeepSeek-V3 noaux_tc grouped top-k routing. Selection uses
+// sigmoid(logit) + correction bias, while routing weights use the unbiased
+// sigmoid score.
+__global__ void grouped_topk_kernel(const float* gate_input,
+                                     const float* routing_bias,
+                                     float* expert_score, int* expert_index,
+                                     int total_token, int num_expert,
+                                     int num_group, int top_k_group, int top_k,
+                                     float routed_scaling_factor) {
+  const int token_idx = blockIdx.x;
+  if (token_idx >= total_token) return;
+
+  const float* logits = gate_input + token_idx * num_expert;
+  float* out_score = expert_score + token_idx * top_k;
+  int* out_index = expert_index + token_idx * top_k;
+  const int experts_per_group = num_expert / num_group;
+
+  extern __shared__ float shared[];
+  float* sigmoid_scores = shared;
+  float* selection_scores = sigmoid_scores + num_expert;
+  float* group_scores = selection_scores + num_expert;
+  int* group_indices = reinterpret_cast<int*>(group_scores + num_group);
+
+  for (int expert = threadIdx.x; expert < num_expert;
+       expert += blockDim.x) {
+    const float score = 1.0f / (1.0f + expf(-logits[expert]));
+    sigmoid_scores[expert] = score;
+    selection_scores[expert] =
+        routing_bias == nullptr ? score : score + routing_bias[expert];
+  }
+  __syncthreads();
+
+  // DeepSeek-V3 scores a group by the sum of its two strongest experts.
+  if (threadIdx.x < num_group) {
+    const int group = threadIdx.x;
+    const int base = group * experts_per_group;
+    float first = -INFINITY;
+    float second = -INFINITY;
+    for (int i = 0; i < experts_per_group; ++i) {
+      const float score = selection_scores[base + i];
+      if (score > first) {
+        second = first;
+        first = score;
+      } else if (score > second) {
+        second = score;
+      }
+    }
+    group_scores[group] = first + second;
+    group_indices[group] = group;
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    for (int i = 0; i < top_k_group; ++i) {
+      int best = i;
+      for (int j = i + 1; j < num_group; ++j) {
+        if (group_scores[j] > group_scores[best]) best = j;
+      }
+      if (best != i) {
+        const float score = group_scores[i];
+        group_scores[i] = group_scores[best];
+        group_scores[best] = score;
+        const int group = group_indices[i];
+        group_indices[i] = group_indices[best];
+        group_indices[best] = group;
+      }
+    }
+
+    // Match the reference mask value of zero before global top-k selection.
+    for (int expert = 0; expert < num_expert; ++expert) {
+      const int group = expert / experts_per_group;
+      bool selected = false;
+      for (int i = 0; i < top_k_group; ++i) {
+        if (group_indices[i] == group) {
+          selected = true;
+          break;
+        }
+      }
+      if (!selected) selection_scores[expert] = 0.0f;
+    }
+
+    int selected_count = 0;
+    for (; selected_count < top_k; ++selected_count) {
+      float best_score = -INFINITY;
+      int best_expert = -1;
+      for (int expert = 0; expert < num_expert; ++expert) {
+        if (selection_scores[expert] > best_score) {
+          best_score = selection_scores[expert];
+          best_expert = expert;
+        }
+      }
+      if (best_expert < 0) break;
+      out_index[selected_count] = best_expert;
+      out_score[selected_count] = sigmoid_scores[best_expert];
+      selection_scores[best_expert] = -INFINITY;
+    }
+
+    float score_sum = 0.0f;
+    for (int i = 0; i < selected_count; ++i) score_sum += out_score[i];
+    if (score_sum > 0.0f) {
+      const float scale = routed_scaling_factor / score_sum;
+      for (int i = 0; i < selected_count; ++i) out_score[i] *= scale;
+    }
+    for (int i = selected_count; i < top_k; ++i) {
+      out_index[i] = 0;
+      out_score[i] = 0.0f;
+    }
+  }
+}
+
+void GroupedTopKKernelLauncher(const float* gate_input,
+                               const float* routing_bias,
+                               float* expert_score, int* expert_index,
+                               int total_token, int num_expert, int num_group,
+                               int top_k_group, int top_k,
+                               float routed_scaling_factor,
+                               cudaStream_t stream) {
+  const int shared_size =
+      2 * num_expert * sizeof(float) + num_group * sizeof(float) +
+      num_group * sizeof(int);
+  const int threads = num_expert < 256 ? num_expert : 256;
+  grouped_topk_kernel<<<total_token, threads, shared_size, stream>>>(
+      gate_input, routing_bias, expert_score, expert_index, total_token,
+      num_expert, num_group, top_k_group, top_k, routed_scaling_factor);
+}
 }  // namespace cuda
 }  // namespace allspark
