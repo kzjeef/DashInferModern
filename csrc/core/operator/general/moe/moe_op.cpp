@@ -39,7 +39,7 @@ AsStatus MoeOp::Init(const OperatorProto& op_proto, const DeviceContext& ctx,
       AS_CHECK_CUDA(cudaGetDevice(&device_id));
       AS_CHECK_CUDA(cudaGetDeviceProperties(&dprop_, device_id));
       int sm_version = dprop_.major << 8 | dprop_.minor;
-      if (sm_version >= 0x0900) {
+      if (sm_version >= 0x0900 && sm_version < 0x0a00) {
         use_dnn_ = true;
       } else {
         use_dnn_ = false;
@@ -77,6 +77,48 @@ AsStatus MoeOp::Init(const OperatorProto& op_proto, const DeviceContext& ctx,
     return AsStatus::ALLSPARK_PARAM_ERROR;
   }
   num_expert_pertoken_ = *(int*)(attr_map.at("num_experts_per_tok").c_str());
+  if (attr_map.find("routing_mode") != attr_map.end()) {
+    routing_mode_ = *(int*)(attr_map.at("routing_mode").c_str());
+  }
+  if (attr_map.find("num_group") != attr_map.end()) {
+    num_group_ = *(int*)(attr_map.at("num_group").c_str());
+  }
+  if (attr_map.find("top_k_group") != attr_map.end()) {
+    top_k_group_ = *(int*)(attr_map.at("top_k_group").c_str());
+  }
+  if (attr_map.find("routed_scaling_factor") != attr_map.end()) {
+    routed_scaling_factor_ =
+        *(float*)(attr_map.at("routed_scaling_factor").c_str());
+  }
+  if (routing_mode_ == 1) {
+    if (num_group_ <= 0 || num_expert_ % num_group_ != 0 ||
+        top_k_group_ <= 0 || top_k_group_ > num_group_ ||
+        num_expert_ / num_group_ < 2 || num_expert_pertoken_ <= 0 ||
+        num_expert_pertoken_ >
+            top_k_group_ * (num_expert_ / num_group_)) {
+      LOG(ERROR) << "MoeOp: invalid grouped routing config: experts="
+                 << num_expert_ << ", top_k=" << num_expert_pertoken_
+                 << ", groups=" << num_group_
+                 << ", top_k_group=" << top_k_group_;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+  }
+  if (routing_mode_ == 1 &&
+      attr_map.find("routing_bias") != attr_map.end()) {
+    const auto& bias_data = attr_map.at("routing_bias");
+    const int bias_count = bias_data.size() / sizeof(float);
+    if (bias_count != num_expert_) {
+      LOG(ERROR) << "MoeOp: routing_bias size " << bias_count
+                 << " does not match num_experts " << num_expert_;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    routing_bias_ = std::make_unique<AsTensor>(
+        "routing_bias_", backend, DataType::FLOAT32, DataMode::DENSE,
+        Shape{bias_count});
+    CopyData(routing_bias_->GetDataPtr(), backend, bias_data.data(),
+             DeviceType::CPU, bias_data.size(), ctx_);
+    has_routing_bias_ = true;
+  }
   first_moe_ = true;
 
   hidden_size_ = weights_[0]->GetShape()[1];
@@ -312,14 +354,27 @@ AsStatus MoeOp::Forward() {
                                  (float*)float_gate_score_->GetDataPtr(),
                                  expert_weight_tensor->GetShape().Count(),
                                  cu_stream);
-        cuda::SoftmaxLowReduceKernelLauncher(
-            (float*)float_gate_score_->GetDataPtr(),
-            (float*)topk_value_->GetDataPtr(), total_token_, num_expert_,
-            cu_stream);
-        cuda::TopKKernelLauncher((float*)experts_score_->GetDataPtr(),
-                                 (int*)topk_indice_->GetDataPtr(),
-                                 (float*)topk_value_->GetDataPtr(),
-                                 total_token_, num_expert_, top_k, cu_stream);
+        if (routing_mode_ == 1) {
+          cuda::GroupedTopKKernelLauncher(
+              (float*)float_gate_score_->GetDataPtr(),
+              has_routing_bias_
+                  ? (float*)routing_bias_->GetDataPtr()
+                  : nullptr,
+              (float*)experts_score_->GetDataPtr(),
+              (int*)topk_indice_->GetDataPtr(), total_token_, num_expert_,
+              num_group_, top_k_group_, top_k, routed_scaling_factor_,
+              cu_stream);
+        } else {
+          cuda::SoftmaxLowReduceKernelLauncher(
+              (float*)float_gate_score_->GetDataPtr(),
+              (float*)topk_value_->GetDataPtr(), total_token_, num_expert_,
+              cu_stream);
+          cuda::TopKKernelLauncher(
+              (float*)experts_score_->GetDataPtr(),
+              (int*)topk_indice_->GetDataPtr(),
+              (float*)topk_value_->GetDataPtr(), total_token_, num_expert_,
+              top_k, cu_stream);
+        }
         if (use_dnn_) {
           cuda::MoeBatchedGemmLauncher<T>(
               (T*)in_tensor->GetDataPtr(),

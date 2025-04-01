@@ -70,6 +70,15 @@ class MoeOp : public AsOperator {
   void** gate_up_proj_out_array;
   void** mid_result_array;
   void** final_result_array;
+
+  // Grouped routing (DeepSeek V3)
+  // routing_mode: 0 = softmax + top-k; 1 = sigmoid + grouped top-k.
+  int routing_mode_ = 0;
+  int num_group_ = 8;
+  int top_k_group_ = 4;
+  float routed_scaling_factor_ = 1.0f;
+  bool has_routing_bias_ = false;
+  std::unique_ptr<AsTensor> routing_bias_;
 };
 
 }  // namespace allspark
