@@ -10,6 +10,7 @@
 #include <common/memory_reuser.h>
 #include <core/operator/generate_opt/postprocess_id/postprocess_id_op.h>
 #include <core/operator/generate_opt/span_attn/span_attn_op.h>
+#include <core/operator/generate_opt/mla_attn/mla_attn_op.h>
 #include <utility/arbiter.h>
 #include <utility/file_util.h>
 #include <utility/mem_registry.h>
@@ -580,7 +581,8 @@ AsStatus AsModel::runDecoderContext() {
       std::vector<std::future<AsStatus>> result(num_dec_layers);
       int layer_idx = 0;
       for (auto& op : graph_ops_["decoder"]) {
-        if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr) {
+        if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr ||
+                dynamic_cast<MLAAttnOp*>(op.get()) != nullptr) {
           result[layer_idx++] = layer_threadpool_->enqueue(
               [this, &op]() { return op->CallAlloc(runtime_ctx_.get()); });
         }
@@ -600,7 +602,8 @@ AsStatus AsModel::runDecoderContext() {
       }
 #else
       for (auto& op : graph_ops_["decoder"]) {
-        if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr) {
+        if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr ||
+                dynamic_cast<MLAAttnOp*>(op.get()) != nullptr) {
           AsStatus status = op->CallAlloc(runtime_ctx_.get());
           CHECK_CUDA_ERROR(op)
           if (status != AsStatus::ALLSPARK_SUCCESS) {
@@ -1233,7 +1236,8 @@ AsStatus AsModel::GenerateContinueDecoder() {
         std::vector<std::future<AsStatus>> result(num_dec_layers);
         int layer_idx = 0;
         for (auto& op : graph_ops_["decoder"]) {
-          if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr) {
+          if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr ||
+                dynamic_cast<MLAAttnOp*>(op.get()) != nullptr) {
             result[layer_idx++] = layer_threadpool_->enqueue(
                 [this, &op]() { return op->CallAlloc(runtime_ctx_.get()); });
           }
@@ -1253,7 +1257,8 @@ AsStatus AsModel::GenerateContinueDecoder() {
         }
 #else
         for (auto& op : graph_ops_["decoder"]) {
-          if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr) {
+          if (dynamic_cast<SpanAttnOp*>(op.get()) != nullptr ||
+                dynamic_cast<MLAAttnOp*>(op.get()) != nullptr) {
             AsStatus status = op->CallAlloc(runtime_ctx_.get());
             CHECK_CUDA_ERROR(op)
             if (status != AsStatus::ALLSPARK_SUCCESS) {
