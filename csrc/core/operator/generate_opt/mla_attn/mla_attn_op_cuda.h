@@ -59,12 +59,11 @@ class MLAAttnOpCUDA : public MLAAttnOp {
 
   // Decoder-specific
   std::unique_ptr<AsTensor> decoder_q_tensor_;
-  std::unique_ptr<AsTensor> decoder_seq_len_tensor_device_;
-  std::unique_ptr<AsTensor> decoder_seq_len_tensor_host_;
 
   // Block table for paged attention
   std::unique_ptr<AsTensor> block_table_tensor_;
   std::unique_ptr<AsTensor> cache_seqlens_tensor_;
+  std::unique_ptr<AsTensor> cache_seqlens_tensor_host_;
 
   // RoPE inverse frequencies for the rope dimensions
   // Shape: [qk_rope_head_dim / 2]
@@ -72,6 +71,7 @@ class MLAAttnOpCUDA : public MLAAttnOp {
 
   // Step list for RoPE position computation
   std::unique_ptr<AsTensor> step_list_tensor_;
+  std::unique_ptr<AsTensor> step_list_tensor_host_;
 
   // Prefill attention workspace (softmax LSE)
   std::unique_ptr<AsTensor> prefill_workspace_tensor_;

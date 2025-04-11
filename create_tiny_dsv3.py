@@ -17,7 +17,47 @@ import json
 from pathlib import Path
 
 import torch
+from safetensors import safe_open
 from safetensors.torch import save_file
+
+
+def verify_checkpoint(output_dir, config, tensors, shard_name):
+    """Verify the on-disk fixture before advertising it as runnable."""
+    output_dir = Path(output_dir)
+
+    with open(output_dir / "config.json") as f:
+        saved_config = json.load(f)
+    with open(output_dir / "model.safetensors.index.json") as f:
+        saved_index = json.load(f)
+
+    if saved_config != config:
+        raise RuntimeError("saved config does not match the generated config")
+    if set(saved_index["weight_map"]) != set(tensors):
+        raise RuntimeError("safetensors index does not cover every generated weight")
+    if set(saved_index["weight_map"].values()) != {shard_name}:
+        raise RuntimeError("safetensors index points at an unexpected shard")
+
+    with safe_open(output_dir / shard_name, framework="pt", device="cpu") as f:
+        if set(f.keys()) != set(tensors):
+            raise RuntimeError("saved shard keys do not match generated weights")
+        for name, expected in tensors.items():
+            actual = f.get_tensor(name)
+            if actual.shape != expected.shape:
+                raise RuntimeError(
+                    f"shape mismatch for {name}: {actual.shape} != {expected.shape}")
+            if actual.dtype != expected.dtype:
+                raise RuntimeError(
+                    f"dtype mismatch for {name}: {actual.dtype} != {expected.dtype}")
+
+    hidden_size = config["hidden_size"]
+    attention_width = (
+        config["num_attention_heads"] * config["v_head_dim"])
+    if attention_width != hidden_size:
+        raise RuntimeError(
+            "mini fixture requires num_attention_heads * v_head_dim "
+            f"to equal hidden_size ({attention_width} != {hidden_size})")
+
+    print(f"  Verified: {len(tensors)} BF16 tensor contracts")
 
 
 def create_tiny_dsv3(output_dir, num_layers=2, num_experts=4,
@@ -194,6 +234,8 @@ class DeepseekV3Config(PretrainedConfig):
     }
     with open(output_dir / "generation_config.json", "w") as f:
         json.dump(generation_config, f, indent=2)
+
+    verify_checkpoint(output_dir, config, tensors, shard_name)
 
     n_params = sum(t.numel() for t in tensors.values())
     print("Created tiny DeepSeek-V3 model:")

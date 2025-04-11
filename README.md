@@ -127,6 +127,23 @@ In `<path_to_dashinfer>/examples` there are examples for C++ and Python interfac
 - [Documentation for All Python Examples](docs/EN/examples_python.md)
 - [Documentation for C++ Examples](docs/EN/examples_cpp.md)
 
+### Tiny DeepSeek-V3 smoke test
+
+The March 2025 support batch includes a deterministic miniature BF16
+DeepSeek-V3 checkpoint that exercises MLA prefill/decode and grouped MoE
+routing without requiring production-size weights:
+
+```bash
+python create_tiny_dsv3.py --output /tmp/tiny-dsv3
+python examples/python/0_basic/cuda/basic_example_deepseek_v3_tiny.py \
+  /tmp/tiny-dsv3
+```
+
+The generator reloads the checkpoint and verifies every BF16 tensor key,
+shape, and dtype before returning. The second command requires a CUDA build of
+DashInfer and one CUDA GPU. A successful run prints
+`PASS: tiny DeepSeek-V3 prefill/decode` and generated token IDs.
+
 ## Multi-Modal Model(VLMs) Support
 
 The VLM Support in [multimodal](multimodal/) folder, it's a toolkit to support Vision Language Models (VLMs) inference based on the DashInfer engine. It's compatible with the OpenAI Chat Completion API, supporting text and image/video inputs.

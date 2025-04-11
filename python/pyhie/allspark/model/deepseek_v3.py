@@ -77,6 +77,7 @@ class DeepSeek_v3(Model):
         qk_nope_head_dim = torch_cfg.get('qk_nope_head_dim', 128)
         qk_rope_head_dim = torch_cfg.get('qk_rope_head_dim', 64)
         v_head_dim = torch_cfg.get('v_head_dim', 128)
+        rope_base = float(torch_cfg.get('rope_theta', 10000.0))
         routed_scaling_factor = torch_cfg.get('routed_scaling_factor', 2.5)
 
         # Number of dense layers (first N layers use standard FFN, rest use MoE)
@@ -361,6 +362,7 @@ class DeepSeek_v3(Model):
                     "qk_nope_head_dim": qk_nope_head_dim,
                     "qk_rope_head_dim": qk_rope_head_dim,
                     "v_head_dim": v_head_dim,
+                    "rope_base": rope_base,
                 },
             )()
 

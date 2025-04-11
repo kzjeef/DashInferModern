@@ -11,6 +11,11 @@ from dashinfer.allspark.engine import TargetDevice
 
 
 def main(model_dir, max_length):
+    input_ids = [2, 3, 4, 5]
+    if max_length <= len(input_ids):
+        raise ValueError(
+            f"--max-length must be greater than {len(input_ids)}")
+
     model_name = "tiny_deepseek_v3"
     loader = allspark.HuggingFaceModel(
         model_dir,
@@ -44,7 +49,7 @@ def main(model_dir, max_length):
         "eos_token_id": 1,
     })
     status, handle, queue = engine.start_request_ids(
-        model_name, loader, [2, 3, 4, 5], generation)
+        model_name, loader, input_ids, generation)
     if status != AsStatus.ALLSPARK_SUCCESS:
         raise RuntimeError(f"failed to start request: {status}")
 

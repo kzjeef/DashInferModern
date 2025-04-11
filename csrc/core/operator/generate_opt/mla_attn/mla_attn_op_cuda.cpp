@@ -33,6 +33,8 @@ AsStatus MLAAttnOpCUDA::deviceInit() {
   AS_CHECK_CUDA(cudaGetDeviceProperties(&dprop_, device_id));
 
   DeviceType dev = ctx_->GetDeviceType();
+  const int32_t pinned_host =
+      static_cast<int32_t>(AsTensorFlags::cuda_pinned_mem);
 
   cuda::flashmla_clear_param(flash_mla_params_);
 #ifdef FLASH_ATTN_V2
@@ -78,12 +80,6 @@ AsStatus MLAAttnOpCUDA::deviceInit() {
   decoder_q_tensor_ = std::make_unique<AsTensor>(
       "mla_decoder_q", dev, dtype_, DataMode::DENSE,
       Shape{1, 1, num_heads_, qk_head_dim()});
-  decoder_seq_len_tensor_device_ = std::make_unique<AsTensor>(
-      "mla_decoder_seq_len_dev", dev, DataType::INT32, DataMode::DENSE,
-      Shape{1});
-  decoder_seq_len_tensor_host_ = std::make_unique<AsTensor>(
-      "mla_decoder_seq_len_host", DeviceType::CPU, DataType::INT32,
-      DataMode::DENSE, Shape{1});
 
   // FlashMLA workspace
   splitkv_out_tensor_ = std::make_unique<AsTensor>(
@@ -98,6 +94,9 @@ AsStatus MLAAttnOpCUDA::deviceInit() {
       "mla_block_table", dev, DataType::INT32, DataMode::DENSE, Shape{1, 1});
   cache_seqlens_tensor_ = std::make_unique<AsTensor>(
       "mla_cache_seqlens", dev, DataType::INT32, DataMode::DENSE, Shape{1});
+  cache_seqlens_tensor_host_ = std::make_unique<AsTensor>(
+      "mla_cache_seqlens_host", DeviceType::CPU, DataType::INT32,
+      DataMode::DENSE, Shape{1}, pinned_host);
 
   // RoPE
   rope_inv_freq_tensor_ = std::make_unique<AsTensor>(
@@ -105,6 +104,9 @@ AsStatus MLAAttnOpCUDA::deviceInit() {
       Shape{qk_rope_head_dim_ / 2});
   step_list_tensor_ = std::make_unique<AsTensor>(
       "mla_step_list", dev, DataType::INT32, DataMode::DENSE, Shape{1});
+  step_list_tensor_host_ = std::make_unique<AsTensor>(
+      "mla_step_list_host", DeviceType::CPU, DataType::INT32,
+      DataMode::DENSE, Shape{1}, pinned_host);
 
   // Prefill flash-attention workspace
   prefill_workspace_tensor_ = std::make_unique<AsTensor>(
@@ -113,7 +115,7 @@ AsStatus MLAAttnOpCUDA::deviceInit() {
   // Span pointer arrays for non-contiguous paged cache
   kv_span_array_tensor_host_ = std::make_unique<AsTensor>(
       "mla_kv_span_array_host", DeviceType::CPU, DataType::POINTER,
-      DataMode::DENSE, Shape{1});
+      DataMode::DENSE, Shape{1}, pinned_host);
   kv_span_array_tensor_device_ = std::make_unique<AsTensor>(
       "mla_kv_span_array_dev", dev, DataType::POINTER, DataMode::DENSE,
       Shape{1});
@@ -161,12 +163,12 @@ AsStatus MLAAttnOpCUDA::deviceReshape(const RuntimeContext* runtime_ctx) {
 
     decoder_q_tensor_->SetShape(
         Shape{max_batch, 1, num_heads_, qk_head_dim()});
-    decoder_seq_len_tensor_device_->SetShape(Shape{max_batch});
-    decoder_seq_len_tensor_host_->SetShape(Shape{max_batch});
     step_list_tensor_->SetShape(Shape{max_batch});
+    step_list_tensor_host_->SetShape(Shape{max_batch});
 
     block_table_tensor_->SetShape(Shape{max_batch, max_num_spans});
     cache_seqlens_tensor_->SetShape(Shape{max_batch});
+    cache_seqlens_tensor_host_->SetShape(Shape{max_batch});
     kv_span_array_tensor_host_->SetShape(Shape{max_batch * max_num_spans});
     kv_span_array_tensor_device_->SetShape(Shape{max_batch * max_num_spans});
 
@@ -329,8 +331,6 @@ AsStatus MLAAttnOpCUDA::runContext(RuntimeContext* runtime_ctx) {
     if (layer_num_ < (int)layer_cache.size() && layer_cache[layer_num_]) {
       auto& cache_vec = layer_cache[layer_num_]->GetCacheVector();
       int num_spans = (int)cache_vec.size();
-      kv_span_array_tensor_host_->SetShape(Shape{num_spans});
-      kv_span_array_tensor_device_->SetShape(Shape{num_spans});
       void** host_ptrs = (void**)kv_span_array_tensor_host_->GetDataPtr();
       for (int s = 0; s < num_spans; s++) {
         host_ptrs[s] = cache_vec[s]->Data();
@@ -466,13 +466,13 @@ AsStatus MLAAttnOpCUDA::runDecoder(RuntimeContext* runtime_ctx) {
     }
 
     // Build step list for position-aware RoPE
-    std::vector<int> host_steps(batch_size_);
+    int* host_steps =
+        static_cast<int*>(step_list_tensor_host_->GetDataPtr());
     for (int b = 0; b < batch_size_; b++) {
       host_steps[b] = runtime_ctx->GetGenCtx(b)->step;
     }
-    step_list_tensor_->SetShape(Shape{batch_size_});
     AS_CHECK_CUDA(cudaMemcpyAsync(
-        step_list_tensor_->GetDataPtr(), host_steps.data(),
+        step_list_tensor_->GetDataPtr(), host_steps,
         batch_size_ * sizeof(int), cudaMemcpyHostToDevice, stream));
     int* step_dev = (int*)step_list_tensor_->GetDataPtr();
 
@@ -521,21 +521,19 @@ AsStatus MLAAttnOpCUDA::runDecoder(RuntimeContext* runtime_ctx) {
     }
 
     // ---- Build span pointer arrays for decode attention ----
-    std::vector<int> host_cache_seqlens(batch_size_);
+    int* host_cache_seqlens =
+        static_cast<int*>(cache_seqlens_tensor_host_->GetDataPtr());
     for (int b = 0; b < batch_size_; b++) {
       GenerateContext* gen_ctx = runtime_ctx->GetGenCtx(b);
       host_cache_seqlens[b] = gen_ctx->step + 1;
     }
 
-    cache_seqlens_tensor_->SetShape(Shape{batch_size_});
     AS_CHECK_CUDA(cudaMemcpyAsync(
-        cache_seqlens_tensor_->GetDataPtr(), host_cache_seqlens.data(),
+        cache_seqlens_tensor_->GetDataPtr(), host_cache_seqlens,
         batch_size_ * sizeof(int), cudaMemcpyHostToDevice, stream));
 
     // Gather span data pointers for each batch's cache
     int total_span_ptrs = batch_size_ * max_num_spans;
-    kv_span_array_tensor_host_->SetShape(Shape{total_span_ptrs});
-    kv_span_array_tensor_device_->SetShape(Shape{total_span_ptrs});
     void** host_span_ptrs =
         (void**)kv_span_array_tensor_host_->GetDataPtr();
     memset(host_span_ptrs, 0, total_span_ptrs * sizeof(void*));
