@@ -143,6 +143,9 @@ __global__ void mla_strided_rope_k_kernel(T* kv_compressed, const float* inv_fre
   float x0 = (float)kv_compressed[i0];
   float x1 = (float)kv_compressed[i1];
 
+  if (isnan(x0) || isinf(x0)) x0 = 0.0f;
+  if (isnan(x1) || isinf(x1)) x1 = 0.0f;
+
   kv_compressed[i0] = (T)(x0 * cos_val - x1 * sin_val);
   kv_compressed[i1] = (T)(x1 * cos_val + x0 * sin_val);
 }
@@ -197,7 +200,10 @@ __global__ void mla_copy_to_span_cache_kernel(
   const T* src = kv_compressed + (int64_t)token * kv_dim;
 
   for (int d = threadIdx.x; d < kv_dim; d += blockDim.x) {
-    dst[d] = src[d];
+    T val = src[d];
+    float fval = (float)val;
+    if (isnan(fval) || isinf(fval)) val = (T)0.0f;
+    dst[d] = val;
   }
 }
 

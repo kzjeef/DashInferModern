@@ -745,9 +745,10 @@ void StridedBatchGemmWraper<hie::bfloat16>(
     beta = 1.f;
   }
   CHECK_CUBLAS(cublasGemmStridedBatchedEx(
-      handle, transB_, transA_, n, m, k, &alpha, matrix_B, CUDA_R_16F, ldb,
-      strideB, matrix_A, CUDA_R_16F, lda, strideA, &beta, matrix_C, CUDA_R_16F,
-      ldc, strideC, batch, CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+      handle, transB_, transA_, n, m, k, &alpha, matrix_B, CUDA_R_16BF, ldb,
+      strideB, matrix_A, CUDA_R_16BF, lda, strideA, &beta, matrix_C,
+      CUDA_R_16BF, ldc, strideC, batch, CUDA_R_32F,
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 }
 void BatchGemmI8Wrapper(void** matrix_C, void** matrix_A, void** matrix_B,
                         int m, int n, int k, bool transA, bool transB,

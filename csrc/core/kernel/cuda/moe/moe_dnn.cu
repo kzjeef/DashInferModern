@@ -356,7 +356,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x16_f32_transA<__half>(
     uint32_t (&C_frag)[2][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n16k16.f32.f16.f16 "
       "{%0, %1, %2, %3, %4, %5, %6, %7}, %8, %9, 1, 1, 1, 1, 0;"
       : "+r"(C_frag[0][0][0]), "+r"(C_frag[0][0][1]), "+r"(C_frag[0][1][0]),
@@ -372,7 +372,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x32_f32_transA<__half>(
     uint32_t (&C_frag)[4][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n32k16.f32.f16.f16 "
       "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7,  "
       " %8,  %9,  %10, %11, %12, %13, %14, %15},"
@@ -393,7 +393,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x48_f32_transA<__half>(
     uint32_t (&C_frag)[6][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n48k16.f32.f16.f16 "
       "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7,  "
       " %8,  %9,  %10, %11, %12, %13, %14, %15, "
@@ -417,7 +417,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x96_f32_transA<__half>(
     uint32_t (&C_frag)[12][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n96k16.f32.f16.f16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -452,7 +452,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x128_f32_transB<__half>(
     uint32_t (&C_frag)[16][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n128k16.f32.f16.f16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -495,7 +495,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x256_f32_transB<__half>(
     uint32_t (&C_frag)[32][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n256k16.f32.f16.f16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -567,7 +567,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x16_f32_transA<__nv_bfloat16>(
     uint32_t (&C_frag)[2][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n16k16.f32.bf16.bf16 "
       "{%0, %1, %2, %3, %4, %5, %6, %7}, %8, %9, 1, 1, 1, 1, 0;"
       : "+r"(C_frag[0][0][0]), "+r"(C_frag[0][0][1]), "+r"(C_frag[0][1][0]),
@@ -583,7 +583,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x32_f32_transA<__nv_bfloat16>(
     uint32_t (&C_frag)[4][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n32k16.f32.bf16.bf16 "
       "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7,  "
       " %8,  %9,  %10, %11, %12, %13, %14, %15},"
@@ -604,7 +604,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x48_f32_transA<__nv_bfloat16>(
     uint32_t (&C_frag)[6][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n48k16.f32.bf16.bf16 "
       "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7,  "
       " %8,  %9,  %10, %11, %12, %13, %14, %15, "
@@ -628,7 +628,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x96_f32_transA<__nv_bfloat16>(
     uint32_t (&C_frag)[12][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n96k16.f32.bf16.bf16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -663,7 +663,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x128_f32_transB<__nv_bfloat16>(
     uint32_t (&C_frag)[16][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n128k16.f32.bf16.bf16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -706,7 +706,7 @@ template <>
 __device__ __forceinline__ void hgmma_64x256_f32_transB<__nv_bfloat16>(
     uint32_t (&C_frag)[32][2][2], const uint64_t& A_desc,
     const uint64_t& B_desc) {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm("wgmma.mma_async.sync.aligned.m64n256k16.f32.bf16.bf16 "
       "{%0,   %1,   %2,   %3,   %4,   %5,   %6,   %7,   "
       " %8,   %9,   %10,  %11,  %12,  %13,  %14,  %15,  "
@@ -775,7 +775,7 @@ __device__ __forceinline__ void hgmma_64x256_f32_transB<__nv_bfloat16>(
 }
 
 __device__ __forceinline__ void warpgroup_arrive() {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm volatile("wgmma.fence.sync.aligned;");
 #else
   asm volatile("trap;");
@@ -783,7 +783,7 @@ __device__ __forceinline__ void warpgroup_arrive() {
 }
 
 __device__ __forceinline__ void warpgroup_commit() {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm volatile("wgmma.commit_group.sync.aligned;");
 #else
   asm volatile("trap;");
@@ -792,7 +792,7 @@ __device__ __forceinline__ void warpgroup_commit() {
 
 template <int N>
 __device__ __forceinline__ void warpgroup_depbar_le() {
-#if __CUDA_ARCH__ >= 900
+#if defined(__CUDA_ARCH_FEAT_SM90_ALL) && __CUDA_ARCH_FEAT_SM90_ALL
   asm volatile("wgmma.wait_group.sync.aligned %0;" : : "n"(N));
 #else
   asm volatile("trap;");
