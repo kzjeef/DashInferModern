@@ -283,6 +283,11 @@ AsStatus GemmOpGPU::Reshape() {
   dim_t ws_size = 0;
   ws_size += is_kpad_ ? size_t(m_ * k_) * sizeof(half) : size_t(0);
   ws_size += is_npad_ ? size_t(m_ * n_) * sizeof(half) : size_t(0);
+  if (weights_[0]->GetDataType() == DataType::FLOAT32 &&
+      dtype_ != DataType::FLOAT32) {
+    dim_t fp32_ws = dim_t(m_) * dim_t(k_) * dim_t(sizeof(float));
+    if (fp32_ws > ws_size) ws_size = fp32_ws;
+  }
   if (ws_size > 0) {
     tensor_map_->at("workspace")->SetShape(Shape{ws_size});
   }
@@ -414,9 +419,22 @@ AsStatus GemmOpGPU::Forward() {
           cu_stream);
   } else {
   */
-  kernel_launcher(in_tensor->GetDataType(), out, in, bias, weight, m_, n_, k_,
-                  lda_, ldb_, ldc_, false, transB_, batch_, alpha_, bin_in,
-                  activation_, ctx_);
+  if (weights_[0]->GetDataType() == DataType::FLOAT32 &&
+      in_tensor->GetDataType() != DataType::FLOAT32) {
+    float* fp32_in = static_cast<float*>(ws_ptr);
+    auto cast_fn = [&]<typename T>() {
+      cuda::CastKernelLauncher(static_cast<const T*>(in), fp32_in,
+                               static_cast<int>(m_ * k_), cu_stream);
+    };
+    DispatchCUDA(in_tensor->GetDataType(), cast_fn);
+    kernel_launcher(DataType::FLOAT32, out, fp32_in, bias, weight, m_, n_, k_,
+                    lda_, ldb_, ldc_, false, transB_, batch_, alpha_, bin_in,
+                    activation_, ctx_);
+  } else {
+    kernel_launcher(in_tensor->GetDataType(), out, in, bias, weight, m_, n_,
+                    k_, lda_, ldb_, ldc_, false, transB_, batch_, alpha_,
+                    bin_in, activation_, ctx_);
+  }
   /*
   }
   */

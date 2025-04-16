@@ -349,11 +349,21 @@ AsStatus MoeOp::Forward() {
       cublasHandle_t cublas_handle = gpu_ctx->GetCublasHandle();
       cudaStream_t cu_stream =
           static_cast<const CUDAContext*>(ctx_)->GetStream();
+      bool gate_logit_is_fp32 =
+          expert_weight_tensor->GetDataType() == DataType::FLOAT32;
       auto functor = [&]<typename T>() {
-        cuda::CastKernelLauncher((T*)expert_weight_tensor->GetDataPtr(),
-                                 (float*)float_gate_score_->GetDataPtr(),
-                                 expert_weight_tensor->GetShape().Count(),
-                                 cu_stream);
+        if (gate_logit_is_fp32) {
+          AS_CHECK_CUDA(cudaMemcpyAsync(
+              float_gate_score_->GetDataPtr(),
+              expert_weight_tensor->GetDataPtr(),
+              expert_weight_tensor->GetShape().Count() * sizeof(float),
+              cudaMemcpyDeviceToDevice, cu_stream));
+        } else {
+          cuda::CastKernelLauncher((T*)expert_weight_tensor->GetDataPtr(),
+                                   (float*)float_gate_score_->GetDataPtr(),
+                                   expert_weight_tensor->GetShape().Count(),
+                                   cu_stream);
+        }
         if (routing_mode_ == 1) {
           cuda::GroupedTopKKernelLauncher(
               (float*)float_gate_score_->GetDataPtr(),

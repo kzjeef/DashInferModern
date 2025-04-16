@@ -626,7 +626,10 @@ class DeepSeek_v3(Model):
                 tensor = torch_weight[torch_name].cpu()
                 if key.find("weight") != -1:
                     tensor = torch.permute(tensor, (1, 0)).contiguous()
-            self.validate_weight_dtype(key, tensor, self_dtype_str)
+            if key.endswith("mlp.gate.weight"):
+                tensor = tensor.float()
+            else:
+                self.validate_weight_dtype(key, tensor, self_dtype_str)
             mode = DENSE if key not in sparse_map else sparse_map[key]
             split_mode = NOSPLIT if key not in split_map else split_map[key]
             if split_mode != GROUP_VSPLIT:

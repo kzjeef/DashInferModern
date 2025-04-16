@@ -120,7 +120,12 @@ AsStatus GemmOpBase::Reshape(int yn) {
     y_shape.Append(yn);
   }
   dtype_ = tensor_map_->at(in_names_[0])->GetDataType();
-  tensor_map_->at(out_names_[0])->SetDataType(dtype_);
+  DataType out_dtype = dtype_;
+  if (!weights_.empty() && weights_[0]->GetDataType() == DataType::FLOAT32 &&
+      dtype_ != DataType::FLOAT32) {
+    out_dtype = DataType::FLOAT32;
+  }
+  tensor_map_->at(out_names_[0])->SetDataType(out_dtype);
   tensor_map_->at(out_names_[0])->SetShape(std::move(y_shape));
 
   const Shape& w_shape = weights_[0]->GetShape();
