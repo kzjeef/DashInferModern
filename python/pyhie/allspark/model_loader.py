@@ -20,6 +20,7 @@ from ._allspark import AsModelConfig
 from .quant.gptq_iq_adapter import GPTQ2IQWeightAdapter
 from .quantization import QuantizeConfig
 from ._allspark import VocabType
+from .nvfp4_config import detect_modelopt_nvfp4
 
 
 class ConfigFieldMissingError(ValueError):
@@ -380,6 +381,7 @@ class HuggingFaceModel(LLM):
         self.hf_model_path = pretrain_model_name_or_path
         self.pretain_model_name = pretrain_model_name
         self.in_memory_serialize = in_memory_serialize
+        self.nvfp4_config = detect_modelopt_nvfp4(self.hf_model_path)
         # For JSON Mode
         self.vocab = None
         self.vocab_type = None
@@ -412,6 +414,11 @@ class HuggingFaceModel(LLM):
         Return self
         """
         kwargs["device_map"] = "cpu"
+        self.nvfp4_config = detect_modelopt_nvfp4(self.hf_model_path)
+        if self.nvfp4_config["enabled"] and not direct_load:
+            raise ValueError(
+                "ModelOpt NVFP4 checkpoints require direct_load=True so "
+                "packed FP4 weights and their scale tensors remain intact")
         # for model convert, only require cpu memory
         if not direct_load:
             # the open-source model can be loaded by huggingface 
@@ -462,6 +469,11 @@ class HuggingFaceModel(LLM):
 
         # init the model config
         self.read_model_config()
+        if self.nvfp4_config["enabled"]:
+            self.as_model_config["is_fp4_model"] = True
+            self.as_model_config["fp4_quant_method"] = "nvfp4"
+            self.as_model_config["nvfp4_block_size"] = \
+                self.nvfp4_config["block_size"]
 
         # For JSON Mode
         # try to get tokenizer
