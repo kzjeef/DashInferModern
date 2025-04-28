@@ -6,6 +6,7 @@ from .model_base import *
 from .utils import WeightNameAdapter
 from ..quantization import *
 from .quantization_utils import *
+from .nvfp4_weights import merge_nvfp4_linears
 import re
 
 
@@ -20,6 +21,11 @@ class DeepSeek_v3(Model):
                                                    dtype=np.int64)))
         self.model.outputs.append(make_tensor("last_hidden_state"))
         self.is_generate = kwargs.get('is_generate', True)
+        self.is_nvfp4 = (
+            self.model_config.get("is_fp4_model", False)
+            and self.model_config.get("fp4_quant_method") == "nvfp4")
+        self.nvfp4_block_size = self.model_config.get(
+            "nvfp4_block_size", 16)
         self._merge_gate_proj(torch_model)
         self.weight_real_names = set()
         for v in torch_model:
@@ -42,14 +48,23 @@ class DeepSeek_v3(Model):
         """Merge gate_proj and up_proj into gate_up_proj for dense FFN,
         routed experts, and shared experts."""
         new_model = {}
-        for key, val in torch_model.items():
+        for key in list(torch_model):
             if key.find("gate_proj.weight") != -1:
                 up_proj_key = key.replace("gate_proj", "up_proj")
                 if up_proj_key in torch_model:
-                    up_proj_val = torch_model[up_proj_key]
                     new_key = key.replace("gate_proj", "gate_up_proj")
-                    tensor = torch.concat([val, up_proj_val]).cpu()
-                    new_model[new_key] = tensor
+                    if self.is_nvfp4 and torch_model[key].dtype == torch.uint8:
+                        merge_nvfp4_linears(
+                            torch_model,
+                            key,
+                            up_proj_key,
+                            new_key,
+                            self.nvfp4_block_size)
+                    else:
+                        tensor = torch.concat([
+                            torch_model[key], torch_model[up_proj_key]
+                        ]).cpu()
+                        new_model[new_key] = tensor
         torch_model.update(new_model)
 
     def _build_graph(self, torch_cfg, derive_type):
