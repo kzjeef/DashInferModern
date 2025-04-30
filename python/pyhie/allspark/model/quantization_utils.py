@@ -80,6 +80,23 @@ def quantize_gemm(op, quant_config, orig_weight_name = None):
             # print(orig_weight_name, op.weights[0].name, group_size)
     return op
 
+
+def quantize_gemm_nvfp4_blockwise(op, block_size=16):
+    """Bind one graph GEMM to native packed ModelOpt NVFP4 weights."""
+    quant_op_type = "GemmNVFP4Blockwise"
+    if op.op_type.upper() == "GEMM":
+        op.op_type = quant_op_type
+    else:
+        op.attr["InnerGemmType"] = quant_op_type.encode()
+
+    weight_name = op.weights[0].name
+    op.weights.insert(1, make_tensor(weight_name + ".weight_scale"))
+    op.weights.insert(2, make_tensor(weight_name + ".weight_scale_2"))
+    op.weights.insert(3, make_tensor(weight_name + ".input_scale"))
+    op.attr["nvfp4_block_size"] = np.array(
+        block_size).astype("int32").tobytes()
+    return op
+
 def quantize_moe(op, quant_config, orig_weight_name = None):
     if quant_config.quantize_mode in [
             QuantizeConfig.QuantMode.A16W8, QuantizeConfig.QuantMode.A16W4, QuantizeConfig.QuantMode.A8W8,

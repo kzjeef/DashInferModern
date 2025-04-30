@@ -26,6 +26,7 @@ class DeepSeek_v3(Model):
             and self.model_config.get("fp4_quant_method") == "nvfp4")
         self.nvfp4_block_size = self.model_config.get(
             "nvfp4_block_size", 16)
+        self.nvfp4_native_weights = set()
         self._merge_gate_proj(torch_model)
         self.weight_real_names = set()
         for v in torch_model:
@@ -523,6 +524,22 @@ class DeepSeek_v3(Model):
         if self.do_dynamic_quantize_convert:
             for op in graph.ops:
                 quantize_op(op, self.quant_config, self.quantize_map)
+
+        if self.is_nvfp4 and not self.do_dynamic_quantize_convert:
+            for op in graph.ops:
+                if (not op.op_type.upper().startswith("GEMM")
+                        or not op.weights
+                        or op.weights[0].name not in self.weight_name_map):
+                    continue
+                torch_name = self.weight_name_map[op.weights[0].name]
+                if not isinstance(torch_name, str):
+                    continue
+                torch_base = torch_name.rsplit(".weight", 1)[0]
+                if torch_base + ".weight_scale" not in self.weight_real_names:
+                    continue
+                quantize_gemm_nvfp4_blockwise(
+                    op, self.nvfp4_block_size)
+                self.nvfp4_native_weights.add(op.weights[0].name)
 
         ##############################################################################################
         # Output layer
