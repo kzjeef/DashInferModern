@@ -6,7 +6,11 @@ from .model_base import *
 from .utils import WeightNameAdapter
 from ..quantization import *
 from .quantization_utils import *
-from .nvfp4_weights import merge_nvfp4_linears
+from .nvfp4_weights import (
+    NVFP4_AUX_SUFFIXES,
+    merge_nvfp4_linears,
+    validate_nvfp4_linear,
+)
 import re
 
 
@@ -644,6 +648,38 @@ class DeepSeek_v3(Model):
             k for k, v in Model.dtype_dict.items() if v == self.dtype
         ][0]
         for key, torch_name in weight_name_map.items():
+            if (not lora_name and self.is_nvfp4
+                    and key in self.nvfp4_native_weights):
+                if not isinstance(torch_name, str):
+                    raise ValueError(
+                        "NVFP4 graph GEMM weights must map to one tensor")
+                validate_nvfp4_linear(
+                    torch_weight, torch_name, self.nvfp4_block_size)
+
+                mode = DENSE if key not in sparse_map else sparse_map[key]
+                split_mode = (NOSPLIT if key not in split_map
+                              else split_map[key])
+                if split_mode != NOSPLIT:
+                    raise ValueError(
+                        "NVFP4 packed weight splitting is not available; "
+                        "serialize the miniature model with multinode_mode=False")
+
+                source_base = torch_name[:-len(".weight")]
+                save_torch_to_allsparky(
+                    weights_path, key, torch_weight[torch_name].cpu(),
+                    mode, NOSPLIT, [])
+                for suffix in NVFP4_AUX_SUFFIXES:
+                    source_name = source_base + suffix
+                    auxiliary = torch_weight[source_name].cpu().contiguous()
+                    if auxiliary.numel() == 1:
+                        auxiliary = auxiliary.reshape(1)
+                    save_torch_to_allsparky(
+                        weights_path, key + suffix, auxiliary,
+                        mode, NOSPLIT, [])
+                    torch_weight[source_name] = torch.Tensor(0)
+                torch_weight[torch_name] = torch.Tensor(0)
+                continue
+
             if isinstance(torch_name, list):
                 if "experts" in key:
                     tensor = (torch.stack(
