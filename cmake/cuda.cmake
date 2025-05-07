@@ -23,6 +23,12 @@ find_package(CUDAToolkit ${CUDA_VERSION} EXACT REQUIRED)
 # cutlass
 include(cutlass)
 
+# CUTLASS 4 is isolated from the project-wide CUTLASS version and is fetched
+# only for an SM100 build that can use native NVFP4 tensor cores.
+if(ENABLE_NVFP4)
+  include(cutlass4)
+endif()
+
 # NOTE: flash-attention MUST be included before cudart
 # flash-attention
 if(${CUDA_VERSION} VERSION_GREATER_EQUAL "11.8")

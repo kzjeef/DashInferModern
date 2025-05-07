@@ -64,6 +64,7 @@ option(ENABLE_ARM_V84_V9 "enable v8.4-a or higher version of Arm instructions, s
 option(ENABLE_FP16 "build with fp16 mode" ON)
 option(ENABLE_BF16 "build with bf16 mode" ON)
 option(ENABLE_FP8 "build with fp8 mode" ON)
+option(ENABLE_NVFP4 "build native ModelOpt NVFP4 kernels on SM100" ON)
 option(ENABLE_SPARSE "build with sparse mode" ON)
 option(ENABLE_CUSPARSELT "build with CUSPARSELT lib" OFF)
 option(BUILD_UTEST "build with unit test" ON)
