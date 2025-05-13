@@ -23,7 +23,7 @@ __host__ __device__ inline int64_t NvFP4ScaleInterleavedOffset(
          static_cast<int64_t>(row / 128) * k_tile_count * 512;
 }
 
-__global__ void NvFP4RepackScaleKernel(
+static __global__ void NvFP4RepackScaleKernel(
     const uint8_t* __restrict__ source,
     uint8_t* __restrict__ destination,
     int row_count, int k_block_count) {
