@@ -116,6 +116,11 @@ if (ENABLE_CUDA)
     )
     list(APPEND CUDA_COMMON_KERNEL_SRC ${CUDA_COMMON_KERNEL_SRC_TMP})
 
+    # CUTLASS 4 SM100 code is compiled by its own target. The project-wide
+    # kernel target uses a different CUTLASS version and architecture list.
+    list(REMOVE_ITEM CUDA_COMMON_KERNEL_SRC
+      "${CMAKE_CURRENT_SOURCE_DIR}/cuda/gemm_lowp/gemm_nvfp4_blockwise_sm100.cu")
+
       file(GLOB_RECURSE CUDA_XFORMER_SRC cuda/xformer_mha/*)
       file(GLOB_RECURSE CUDA_MOE_SRC cuda/moe/*.cu)
 
