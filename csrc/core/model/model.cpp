@@ -77,17 +77,6 @@ namespace allspark {
 using std::string;
 using std::vector;
 
-AsStatus AsModel::SaveWeights(std::string* out_allsparkz) {
-  DLOG(INFO) << "AsModel::SaveWeights()" << std::endl;
-
-  try {
-    weight_manager_->SaveWeights(weight_handler_, out_allsparkz);
-  } catch (AsException& e) {
-    return AsStatus::ALLSPARK_RUNTIME_ERROR;
-  }
-  return AsStatus::ALLSPARK_SUCCESS;
-}
-
 void AsModel::ChangeGemmOpType(OpRegistType& op_type) {
   if (op_type.op_type_str == "GemmA8W8" &&
       ctx_->GetDeviceType() == DeviceType::CUDA) {
@@ -331,34 +320,6 @@ AsStatus AsModel::Init(const TransformerProto& model_proto,
 
   return AsStatus::ALLSPARK_SUCCESS;
 }
-
-AsStatus AsModel::ReloadModelToDeviceMemory() {
-  DLOG(INFO) << "AsModel::LoadWeightsFromBuffer()" << std::endl;
-  weight_manager_->SwapInWeight(weight_handler_, this->GetRankInfo());
-  return AsStatus::ALLSPARK_SUCCESS;
-}
-
-AsStatus AsModel::UnloadModelFromDeviceMemory() {
-  DLOG(INFO) << "AsModel::UnloadModelFromDeviceMemory()" << std::endl;
-  ctx_->Synchronize();
-
-  // free all containers
-  graph_ops_.clear();
-  tensors_.clear();
-  embedding_.clear();
-  input_names_.clear();
-  output_names_.clear();
-  topo_ops_.clear();
-
-  weight_manager_->SwapOutWeight(weight_handler_, this->GetRankInfo());
-  // 释放blocks
-  const_cast<DeviceContext*>(ctx_)->ResetBlockPools();
-
-  DLOG(INFO) << "AsModel::UnloadModelFromDeviceMemory() END" << std::endl;
-  return AsStatus::ALLSPARK_SUCCESS;
-}
-
-void AsModel::PrintWeights() {}
 
 #define CHECK_CUDA_ERROR(op)
 
