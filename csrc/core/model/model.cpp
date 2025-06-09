@@ -4,6 +4,7 @@
  */
 
 #include "model.h"  // NOLINT
+#include "model_internal.h"  // NOLINT
 
 #include <common/engine_runtime.h>
 #include <common/env_config.h>
@@ -36,48 +37,9 @@
 
 #include "runtime/weight/weight_manager_lora.h"
 
-#define DEBUG_GEN_LAYER 0
-#define DEBUG_GEN_LAYER_SAVE_NPY 0
-#define DEBUG_GEN_LAYER_SYNC 0
-
-#ifdef ENABLE_CUDA
-// profile the fixed batch size gneration layer.
-// start nsys with: `nsys  profile -c cudaProfilerApi xxx`
-// better disable wramup for this profiling.
-#define PROFILE_CONTEXT_TIME_GPU 0
-#define PROFILE_GENERATION_TIME_GPU 0
-// this requires ENABLE_NSYS_PROFILE in cuda_context.cpp.
-#define PROFILE_GENERATION_TIME_BS 100
-#endif
-
-static bool isWarmupRequest(const std::string& str) {
-  const std::string start_with = "warmup_request_";
-  return str.find(start_with) == 0;
-}
-
-#ifdef DEBUG_GEN_LAYER
-bool debugCurrentRequest(const std::string& str) {
-  if (isWarmupRequest(str)) return false;
-
-  std::string target_request = "";
-  // std::string target_request = "0000000000000000000000000000001";
-
-  if (target_request == "") {
-    // debug all requests
-    return true;
-  } else if (target_request == str) {
-    return true;
-  } else {
-    return false;
-  }
-}
-#endif
-
 namespace allspark {
 using std::string;
 using std::vector;
-
-#define CHECK_CUDA_ERROR(op)
 
 /*
 #define CHECK_CUDA_ERROR(op) do { \
