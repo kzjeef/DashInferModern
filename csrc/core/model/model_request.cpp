@@ -303,4 +303,34 @@ Request* AsModel::GetRequestById(const std::string& request_id) {
   return all_request_map_.at(request_id).get();
 }
 
+void AsModel::PrefillChunkRequest(std::shared_ptr<Request> request) {
+  if (request->request_id.find("warmup") != std::string::npos) {
+    pending_request_queue_.pop();
+    StartRequest(request);
+    request->prefill_chunk_len = request->input_len;
+    return;
+  }
+
+  int new_len = request->prefill_chunk_len + ctx_->GetModelMaxPrefillLength();
+  // Prefix cache stores input_len - 1 tokens, so include the next token here.
+  new_len += 1;
+
+  if (new_len >= request->input_len) {
+    request->inputs.at("input_ids")->SetShape(Shape{1, request->origin_len});
+    pending_request_queue_.pop();
+    StartRequest(request);
+    request->prefill_chunk_len = request->input_len;
+  } else {
+    std::shared_ptr<Request> request_ptr = std::make_shared<Request>(
+        request->request_id, request->inputs, request->outputs,
+        request->gen_cfg, request->interim);
+    request_ptr->request_id.append("_chunk_prefill");
+    request_ptr->input_len = new_len;
+    request_ptr->inputs.at("input_ids")->SetShape(Shape{1, new_len});
+    request_ptr->gen_cfg.max_length = new_len + 1;
+    StartRequest(request_ptr);
+    request->prefill_chunk_len = new_len - 1;
+  }
+}
+
 }  // namespace allspark
