@@ -53,46 +53,6 @@ std::endl; \
             } while (false);
 */
 
-// XXX: This function will be called by *all* worker thread
-// the handle and gen cfg passed from main loop thread,
-// so *any* write operation (none const operation is not allowed!)
-AsStatus AsModel::StartRequestImpl(
-    const std::shared_ptr<RequestHandle> request_handle,
-    const std::string request_id, TensorMap* outputs,
-    const GenerateConfig& gen_cfg) {
-  DLOG(INFO) << "AsModel::StartRequestImpl()" << std::endl;
-  std::shared_ptr<Request> request_ptr = std::make_shared<Request>(
-      request_id, *request_handle->inputs_internal, *outputs, gen_cfg);
-  request_ptr->input_len = request_ptr->inputs.at("input_ids")->GetShape()[1];
-  request_ptr->origin_len = request_ptr->input_len;
-  request_ptr->extra_embedding = request_handle->mm_embedding_internal;
-  request_ptr->enqueue_ts = request_handle->create_ts;
-#ifdef ENABLE_JSON_MODE
-  if (gen_cfg.response_format.count("type")) {
-    try {
-      if (gen_cfg.response_format.at("type") == "json_object") {
-        request_ptr->format_enforcer = request_handle->format_enforcer;
-      }
-    } catch (const std::out_of_range& ex) {
-      // not found response format, ignore.
-    }
-  }
-#endif
-  DLOG(INFO) << "AsModel::StartRequestImpl(): input length:"
-             << request_ptr->input_len;
-
-  std::unique_lock<std::mutex> lock(request_map_lock_);
-  pending_request_queue_.push(request_ptr);
-
-  all_request_map_[request_id] = request_ptr;
-  return AsStatus::ALLSPARK_SUCCESS;
-}
-AsStatus AsModel::GenerateContinue() {
-  AsStatus ret = GenerateContinueDecoder();
-  AS_CHECK_STATUS(ret);
-  return ret;
-  // return AsStatus::ALLSPARK_SUCCESS;
-}
 AsStatus AsModel::AllocDecoderMemory() {
   std::unique_lock<std::mutex> lock(gen_ctx_lock_);
   const int async_token_num = 1;  // TODO gen_cfg.async_token_num
