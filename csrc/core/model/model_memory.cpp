@@ -8,6 +8,9 @@
 #include <common/device_context.h>
 #include <common/engine_runtime.h>
 
+#include <algorithm>
+#include <cmath>
+
 namespace allspark {
 
 AsStatus AsModel::AllocDecoderMemory() {
@@ -43,6 +46,57 @@ AsStatus AsModel::AllocDecoderMemory() {
     }
   }
 #endif
+  return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsStatus AsModel::Warmup(int64_t bytes_available, int64_t bytes_runtime) {
+  DLOG(INFO) << "AsModel::Warmup()";
+  if (bytes_available < 0) {
+    LOG(ERROR) << "AsModel::Warmup: bytes_available must be non-negative, got "
+               << bytes_available;
+    return AsStatus::ALLSPARK_PARAM_ERROR;
+  }
+
+  if (bytes_runtime < 0) {
+    LOG(ERROR) << "AsModel::Warmup: bytes_runtime must be non-negative, got "
+               << bytes_runtime;
+    return AsStatus::ALLSPARK_PARAM_ERROR;
+  }
+
+  float runtime_mem_ratio = 1.1;
+  // LoRA load/unload can temporarily fluctuate while BFC reclaims memory.
+  if (ctx_->GetLoraEnabled()) {
+    runtime_mem_ratio = 1.5;
+  }
+  LOG(INFO) << "warm-up: runtime memory reservation ratio: "
+            << runtime_mem_ratio;
+
+  const int64_t bytes_cache = std::max(
+      0L, bytes_available - static_cast<int64_t>(
+                                std::ceil(bytes_runtime * runtime_mem_ratio)));
+
+#if ENABLE_SPAN_ATTENTION
+  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
+    size_t num_to_grow = bytes_cache / cache_frame_manager_->GetFrameSize();
+    LOG(INFO) << "warm-up: trying to grow " << num_to_grow
+              << " frames, current count of frames: "
+              << cache_frame_manager_->CountFrame();
+    if (cache_frame_manager_->GrowBy(num_to_grow)) {
+      if (prefix_cache_manager_ != nullptr) {
+        prefix_cache_manager_->UpdateCapacity();
+      }
+      LOG(INFO)
+          << "warm-up: grow successfully, total number of claimed span frames: "
+          << cache_frame_manager_->CountFrame();
+    } else {
+      LOG(ERROR) << "AsModel::Warmup: failed to grow all " << num_to_grow
+                 << " frames, total number of claimed span frames: "
+                 << cache_frame_manager_->CountFrame();
+      return AsStatus::ALLSPARK_MEMORY_ERROR;
+    }
+  }
+#endif
+
   return AsStatus::ALLSPARK_SUCCESS;
 }
 
