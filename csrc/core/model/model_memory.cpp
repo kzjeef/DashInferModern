@@ -100,4 +100,53 @@ AsStatus AsModel::Warmup(int64_t bytes_available, int64_t bytes_runtime) {
   return AsStatus::ALLSPARK_SUCCESS;
 }
 
+int64_t AsModel::GetAvailableMemoryBytes() {
+  int64_t bytes{0};
+  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
+#if ENABLE_SPAN_ATTENTION
+    bytes = cache_allocator_->GetDeviceFreeMemory();
+    LOG(INFO) << "AsModel: device available memory (MB): " << (bytes >> 20);
+#else
+    LOG(WARNING)
+        << "AsModel::GetAvailableMemoryBytes: span attention disabled, "
+           "this function will always return 0";
+#endif
+  }
+  return bytes;
+}
+
+int64_t AsModel::GetOccupiedMemoryBytes() {
+  int64_t bytes{0};
+  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
+#if ENABLE_SPAN_ATTENTION
+    bytes = cache_allocator_->GetDeviceUsedMemory();
+    LOG(INFO) << "AsModel: device occupied memory (MB): " << (bytes >> 20);
+#else
+    LOG(WARNING) << "AsModel::GetOccupiedMemoryBytes: span attention disabled, "
+                    "this function will always return 0";
+#endif
+  }
+  return bytes;
+}
+
+int64_t AsModel::GetTotalMemoryBytes() {
+  int64_t bytes{0};
+  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
+#if ENABLE_SPAN_ATTENTION
+    bytes = cache_allocator_->GetDeviceTotalMemory();
+    LOG(INFO) << "AsModel: device total memory (MB): " << (bytes >> 20);
+#else
+    LOG(WARNING) << "AsModel::GetTotalMemoryBytes: span attention disabled, "
+                    "this function will always return 0";
+#endif
+  }
+  return bytes;
+}
+
+#if ENABLE_SPAN_ATTENTION
+int64_t AsModel::GetFreeFrame() {
+  return cache_frame_manager_->CountFreeFrame();
+}
+#endif
+
 }  // namespace allspark

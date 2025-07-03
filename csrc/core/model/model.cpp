@@ -53,55 +53,6 @@ std::endl; \
             } while (false);
 */
 
-int64_t AsModel::GetAvailableMemoryBytes() {
-  int64_t ret{0};
-  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
-#if ENABLE_SPAN_ATTENTION
-    ret = cache_allocator_->GetDeviceFreeMemory();
-    LOG(INFO) << "AsModel: device available memory (MB): " << (ret >> 20);
-#else
-    LOG(WARNING)
-        << "AsModel::GetAvailableMemoryBytes: span attention disabled, "
-           "this function will always return 0";
-#endif  // ENABLE_SPAN_ATTENTION
-  }
-  return ret;
-}
-
-int64_t AsModel::GetOccupiedMemoryBytes() {
-  int64_t ret{0};
-  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
-#if ENABLE_SPAN_ATTENTION
-    ret = cache_allocator_->GetDeviceUsedMemory();
-    LOG(INFO) << "AsModel: device occupied memory (MB): " << (ret >> 20);
-#else
-    LOG(WARNING) << "AsModel::GetOccupiedMemoryBytes: span attention disabled, "
-                    "this function will always return 0";
-#endif  // ENABLE_SPAN_ATTENTION
-  }
-  return ret;
-}
-
-int64_t AsModel::GetTotalMemoryBytes() {
-  int64_t ret{0};
-  if (ctx_->GetDeviceType() == DeviceType::CUDA) {
-#if ENABLE_SPAN_ATTENTION
-    ret = cache_allocator_->GetDeviceTotalMemory();
-    LOG(INFO) << "AsModel: device total memory (MB): " << (ret >> 20);
-#else
-    LOG(WARNING) << "AsModel::GetTotalMemoryBytes: span attention disabled, "
-                    "this function will always return 0";
-#endif  // ENABLE_SPAN_ATTENTION
-  }
-  return ret;
-}
-
-#if ENABLE_SPAN_ATTENTION
-int64_t AsModel::GetFreeFrame() {
-  return cache_frame_manager_->CountFreeFrame();
-}
-#endif
-
 void AsModel::UpdateAsEngineStat(AsEngineStat* as_stat) {
 #if ENABLE_SPAN_ATTENTION
   if (cache_span_manager_ && cache_frame_manager_) {
