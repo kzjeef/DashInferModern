@@ -34,4 +34,3 @@ inline bool debugCurrentRequest(const std::string& request_id) {
 #endif
 
 #define CHECK_CUDA_ERROR(op)
-
