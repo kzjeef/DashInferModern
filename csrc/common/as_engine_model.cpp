@@ -5,6 +5,7 @@
 
 #include "as_engine_device.h"
 #include "as_engine_impl.h"
+#include "thread_utils.h"
 
 #include <common/env_config.h>
 #include <cpu/cpu_info.h>
@@ -18,10 +19,14 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <cstdlib>
+#include <exception>
 #include <fstream>
+#include <future>
 #include <iomanip>
 #include <stdexcept>
 #include <tuple>
+#include <thread>
 
 #ifdef ENABLE_CUDA
 #include <cuda/cuda_context.h>
@@ -29,6 +34,8 @@
 
 namespace allspark {
 namespace {
+
+constexpr int kWarmupInput = 5;
 
 bool ReadProtoFromTextFile(const char* filename,
                            google::protobuf::Message* proto) {
@@ -205,6 +212,161 @@ AsStatus AsEngineImpl::BuildModelFromConfigStruct(AsModelConfig& model_config) {
   AS_CHECK_STATUS(
       BuildModel(model_name.c_str(), model_proto, model_weight_handler));
   return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsStatus AsEngineImpl::BuildModel(
+    const char* model_name, const std::string& model_proto,
+    std::shared_ptr<ModelWeightHandler> weight_handler,
+    const std::map<std::string, int>& model_limits) {
+  DLOG(INFO) << "AsEngineImpl::BuildModel()" << std::endl;
+  AsModelConfig model_config = weight_handler->GetModelConfig();
+  std::unique_ptr<TransformerProto> model_ir =
+      std::make_unique<TransformerProto>();
+  model_ir->ParseFromString(model_proto);
+
+  auto& graph = model_ir->graphs();
+  device_ctx_->SetLoraEnabled(false);
+  for (auto& graph_name : model_ir->graph_names()) {
+    for (auto& op_proto : graph.at(graph_name).ops()) {
+      if (op_proto.op_type() == "GemmLoraCapsule") {
+        device_ctx_->SetLoraEnabled(true);
+        break;
+      }
+    }
+  }
+  if (device_ctx_->GetLoraEnabled()) {
+    LOG(INFO) << "lora enabled";
+  }
+
+  device_ctx_->SetNumberHeads(model_ir->model_conf().num_heads());
+  device_ctx_->SetNumberGroups(model_ir->model_conf().multi_query_group_num());
+  device_ctx_->SetSizePerHead(model_ir->model_conf().size_per_head());
+  device_ctx_->SetIntermediateSize(model_ir->model_conf().intermediate_size());
+  device_ctx_->SetDecoderLayer(model_ir->model_conf().dec_layer());
+  device_ctx_->SetDtype(model_ir->model_conf().dtype());
+  device_ctx_->SetLoraMaxNum(model_config.lora_max_num);
+  device_ctx_->SetLoraMaxRank(model_config.lora_max_rank);
+  for (const auto& item : model_limits) {
+    if (item.second < 0) {
+      LOG(ERROR) << "invalid engine limit param, should >= 0" << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    if (item.first == "engine_max_length") {
+      engine_max_length_ = item.second;
+    }
+    if (item.first == "engine_max_batch") {
+      engine_max_batch_ = item.second;
+    }
+    if (item.first == "swap_threshold") {
+      util::SetSwapThreshold(item.second);
+    }
+  }
+
+  const char* cache_size = std::getenv("ALLSPARK_KVCACHE_ALLOC_SIZE");
+  if (cache_size == nullptr) {
+    device_ctx_->SetKVcacheSize(engine_max_length_);
+  } else {
+    int kv_size = std::atoi(cache_size);
+    if (kv_size > engine_max_length_) {
+      LOG(ERROR) << "invalid ALLSPARK_KVCACHE_ALLOC_SIZE = " << kv_size
+                 << ", should <= engine_max_length" << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    device_ctx_->SetKVcacheSize(kv_size == -1 ? engine_max_length_ : kv_size);
+  }
+
+  const char* torch_sample = std::getenv("ALLSPARK_USE_TORCH_SAMPLE");
+  device_ctx_->SetUseTorchSample(torch_sample != nullptr &&
+                                 std::atoi(torch_sample) != 0);
+  device_ctx_->SetModelMaxLength(engine_max_length_);
+  device_ctx_->SetModelMaxBatch(engine_max_batch_);
+  device_ctx_->SetModelMaxPrefillLength(engine_max_prefill_length_);
+
+#if ENABLE_SPAN_ATTENTION
+  if (device_ctx_->GetDeviceType() == DeviceType::CUDA &&
+      device_ctx_->GetCacheSpanSize() != 0 &&
+      device_ctx_->GetCacheSpanNumInit() == 0 &&
+      device_ctx_->GetCacheSpanNumGrow() == 0) {
+    LOG(INFO) << "BuildModel: using adaptive cache span settings";
+    constexpr int kv_cache_count = 2;
+    int warmup_single_batch_spans =
+        (device_ctx_->GetModelMaxLength() +
+         device_ctx_->GetCacheSpanSize() - 1) /
+            device_ctx_->GetCacheSpanSize() +
+        1;
+    int multi_batch_tokens =
+        kWarmupInput +
+        (device_ctx_->GetModelMaxBatch() /
+             (device_ctx_->GetModelMaxPrefillLength() / kWarmupInput) +
+         5);
+    if (device_ctx_->GetSchedulingStrategy() !=
+        AsSchedulingStrategy::ContextPriority) {
+      multi_batch_tokens += device_ctx_->GetModelMaxBatch();
+    }
+
+    int warmup_multi_batch_spans =
+        (((multi_batch_tokens + 32) + device_ctx_->GetCacheSpanSize() - 1) /
+             device_ctx_->GetCacheSpanSize() +
+         1) *
+        device_ctx_->GetModelMaxBatch();
+    int num_spans_per_seq =
+        std::max(warmup_single_batch_spans, warmup_multi_batch_spans);
+    int num_spans = kv_cache_count * device_ctx_->GetDecoderLayer() *
+                    (num_spans_per_seq + 1);
+    AS_CHECK_STATUS(setSpanCacheConfig(device_ctx_->GetCacheMode(),
+                                       device_ctx_->GetCacheSpanSize(),
+                                       num_spans, 0));
+    use_adaptive_cache_ = true;
+  }
+#endif
+
+  LOG(INFO) << "Start BuildModel";
+  ExpandRankThreadPool();
+  std::vector<std::thread> worker_threads(nranks_);
+  std::vector<std::promise<AsStatus>> results(nranks_);
+#if ENABLE_SPAN_ATTENTION
+  if (device_ctx_->GetDeviceType() == DeviceType::CUDA &&
+      model_config.enable_prefix_cache) {
+    prefix_cache_coordinator_ =
+        std::make_shared<PrefixCacheCoordinator>(nranks_);
+  }
+#endif
+
+  for (int i = 0; i < nranks_; ++i) {
+    worker_threads[i] = std::thread([&, i]() {
+      setThreadName(i, "ModelBuildThread");
+      try {
+        LOG(INFO) << "Start Build model for rank: " << i;
+        AsStatus status = workers_[i]->BuildModel(
+            *model_ir, weight_manager_, weight_handler, device_ctx_.get(),
+            prefix_cache_coordinator_);
+        LOG(INFO) << "Finish Build model for rank: " << i;
+        results[i].set_value(status);
+      } catch (const std::exception&) {
+        results[i].set_exception(std::current_exception());
+      }
+    });
+  }
+
+  AsStatus build_status = AsStatus::ALLSPARK_SUCCESS;
+  for (int i = 0; i < nranks_; ++i) {
+    try {
+      AsStatus status = results[i].get_future().get();
+      if (status != AsStatus::ALLSPARK_SUCCESS) {
+        build_status = status;
+      }
+    } catch (const std::exception& error) {
+      LOG(ERROR) << "Build model failed with exception: " << error.what()
+                 << " rank " << i;
+      throw;
+    }
+  }
+
+  for (auto& worker_thread : worker_threads) {
+    worker_thread.join();
+  }
+  model_irs_[model_name] = std::move(model_ir);
+  return build_status;
 }
 
 }  // namespace allspark
