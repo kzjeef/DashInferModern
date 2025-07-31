@@ -8,12 +8,15 @@
 #include "thread_utils.h"
 
 #include <common/env_config.h>
+#include <common/allocator.h>
 #include <cpu/cpu_info.h>
 #include <fcntl.h>
+#include <git_version.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/text_format.h>
 #include <unistd.h>
 #include <utility/file_util.h>
+#include <utility/allsparkz_util.h>
 #include <utility/mem_registry.h>
 
 #include <algorithm>
@@ -367,6 +370,131 @@ AsStatus AsEngineImpl::BuildModel(
   }
   model_irs_[model_name] = std::move(model_ir);
   return build_status;
+}
+
+AsStatus AsEngineImpl::UnloadModelFromDeviceMemory(const char* model_name) {
+  DLOG(INFO) << "[" << model_name << "] "
+             << "AsEngineImpl::UnloadModelFromDeviceMemory()" << std::endl;
+
+  const char* use_bfc = std::getenv("BFC_ALLOCATOR");
+  bool bfc_enabled = use_bfc == nullptr || std::string(use_bfc) != "OFF";
+  const char* allow_growth = std::getenv("BFC_ALLOW_GROWTH");
+  bool bfc_allow_growth =
+      allow_growth == nullptr || std::string(allow_growth) != "OFF";
+  if (bfc_enabled && !bfc_allow_growth) {
+    LOG(ERROR) << "[" << model_name << "] "
+               << "Cannot unload device memory when using BFC allocator while "
+                  "BFC_ALLOW_GROWTH is OFF! You should export "
+                  "BFC_ALLOW_GROWTH=ON"
+               << std::endl;
+    return AsStatus::ALLSPARK_PARAM_ERROR;
+  }
+
+  std::vector<std::future<AsStatus>> results(nranks_);
+  for (int i = 0; i < nranks_; ++i) {
+    results[i] = threadpool_->enqueue(
+        i, [this, i]() { return workers_[i]->UnloadModelFromDeviceMemory(); });
+  }
+  for (auto& result : results) {
+    AS_CHECK_STATUS(result.get());
+  }
+
+  util::RegFreeMem();
+  SweepBFCAllocator();
+  DLOG(INFO) << "[" << model_name << "] "
+             << "AsEngineImpl::UnloadModelFromDeviceMemory() END" << std::endl;
+  return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsFileInfo AsEngineImpl::GetFileInformation(const char* as_model_path,
+                                            const char* as_param_path) {
+  AsFileInfo file_info;
+  std::shared_ptr<TransformerProto> model_ir =
+      std::make_shared<TransformerProto>();
+
+  std::ifstream input(as_model_path);
+  if (!model_ir->ParseFromIstream(&input)) {
+    LOG(ERROR) << "Invalid binary model format. model_path:" << as_model_path
+               << std::endl;
+    throw std::invalid_argument("invalid path");
+  }
+  const BuildMetaProto& build_meta = model_ir->build_meta();
+  AsParamGuard guard;
+  std::string version;
+  if (!guard.get_version(build_meta, version)) {
+    LOG(ERROR) << "Error on get graph version info";
+    throw std::invalid_argument("no version info");
+  }
+
+  char buffer[256];
+  snprintf(buffer, sizeof(buffer), "%s.%s.%s", ALLSPARK_VERSION_MAJOR,
+           ALLSPARK_VERSION_MINOR, ALLSPARK_VERSION_PATCH);
+  file_info.create_version_param = version;
+  file_info.create_version_graph = version;
+  file_info.current_version_engine = buffer;
+  return file_info;
+}
+
+AsStatus AsEngineImpl::ReloadModelFromDeviceMemory(const char* model_name) {
+  DLOG(INFO) << "[" << model_name << "] "
+             << "AsEngineImpl::ReloadModelFromDeviceMemory()" << std::endl;
+
+  const auto& model_ir = model_irs_[model_name];
+  if (model_ir == nullptr) {
+    LOG(ERROR) << "[" << model_name << "] model_ir ptr is NULL" << std::endl;
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
+  }
+
+  std::vector<std::future<AsStatus>> results(nranks_);
+  for (int i = 0; i < nranks_; ++i) {
+    results[i] = threadpool_->enqueue(i, [this, i, &model_ir]() {
+      return workers_[i]->RebuildModelFromBuffer(model_ir);
+    });
+  }
+  for (auto& result : results) {
+    AS_CHECK_STATUS(result.get());
+  }
+  return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsStatus AsEngineImpl::GetModelInformation(const char* model_name,
+                                           std::string* model_info) {
+  DLOG(INFO) << "[" << model_name << "] "
+             << "AsEngineImpl::GetModelInformation()" << std::endl;
+  if (!workers_.empty() && workers_[0]->GetRank() == 0) {
+    workers_[0]->GetInformation(model_info);
+    return AsStatus::ALLSPARK_SUCCESS;
+  }
+  LOG(ERROR) << "[" << model_name << "] workers is empty" << std::endl;
+  return AsStatus::ALLSPARK_INVALID_CALL_ERROR;
+}
+
+std::string AsEngineImpl::GetOpProfilingInfo(const char* model_name) {
+  DLOG(INFO) << "[" << model_name << "] "
+             << "AsEngineImpl::GetOpProfilingInfo()" << std::endl;
+  if (!workers_.empty()) {
+    return workers_[0]->GetOpProfilingInfo();
+  }
+  LOG(ERROR) << "[" << model_name << "] workers is empty" << std::endl;
+  return {};
+}
+
+int AsEngineImpl::GetRankId() {
+  DLOG(INFO) << "AsEngineImpl::GetRankId()" << std::endl;
+  if (!workers_.empty()) {
+    return workers_[0]->GetRank();
+  }
+  LOG(ERROR) << "workers is empty" << std::endl;
+  return 0;
+}
+
+int AsEngineImpl::GetRankNums() {
+  DLOG(INFO) << "AsEngineImpl::GetRankNums()" << std::endl;
+  if (!workers_.empty()) {
+    return workers_[0]->GetRankNums();
+  }
+  LOG(ERROR) << "workers is empty" << std::endl;
+  return 0;
 }
 
 }  // namespace allspark
