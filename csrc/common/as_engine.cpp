@@ -89,13 +89,6 @@ const int warmup_input = 5;
 namespace fs = std::filesystem;
 namespace allspark {
 
-ModelControlState::ModelControlState(const std::string& name)
-    : model_name(name), msg_queue(1000) {
-  request_handle_map.reserve(1000);
-  result_queue_map.reserve(1000);
-  msg_queue_size.store(0);
-}
-
 AsStatus AsEngineImpl::TunePrefixCache(const char* model_name) {
 #if ENABLE_SPAN_ATTENTION
   if (device_ctx_->GetDeviceType() == DeviceType::CUDA) {
