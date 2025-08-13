@@ -126,4 +126,118 @@ AsStatus AsEngineImpl::StartRequest(
   return AsStatus::ALLSPARK_SUCCESS;
 }
 
+AsStatus AsEngineImpl::StopRequest(const char* model_name,
+                                   RequestHandle* request_handle) {
+  std::lock_guard<std::mutex> lora_guard(lora_lock_);
+  if (!request_handle) {
+    LOG(ERROR) << "[" << model_name
+               << "] StopRequest: request_handle cannot be nullptr";
+    return AsStatus::ALLSPARK_EMPTY_REQUEST;
+  }
+
+  TracerLog trace(device_ctx_->GetDeviceType(), "StopRequest", 1);
+  auto reply_promise = std::make_shared<std::promise<AsStatus>>();
+  std::string uuid = request_handle->request_uuid;
+  assert(model_state_map_[model_name].get() != nullptr);
+  auto& model_state = model_state_map_[model_name];
+
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemPostInterProcess();
+#endif
+  auto message = EngineControlMessage(EngineControlMessageId::StopRequest,
+                                      reply_promise, uuid);
+  model_state->msg_queue.enqueue(std::move(message));
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+
+  AsStatus status = reply_promise->get_future().get();
+  if (status == AsStatus::ALLSPARK_SUCCESS) {
+    LOG(INFO) << "[" << model_name << "] StopRequest success with uuid: "
+              << uuid;
+  } else {
+    LOG(ERROR) << "[" << model_name << "] StopRequest failed with error "
+               << static_cast<int>(status);
+  }
+  return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsStatus AsEngineImpl::ReleaseRequest(const char* model_name,
+                                      RequestHandle* request_handle) {
+  std::lock_guard<std::mutex> lora_guard(lora_lock_);
+  if (!request_handle) {
+    LOG(ERROR) << "[" << model_name
+               << "] ReleaseRequest: request_handle cannot be nullptr";
+    return AsStatus::ALLSPARK_EMPTY_REQUEST;
+  }
+
+  TracerLog trace(device_ctx_->GetDeviceType(), "ReleaseRequest", 1);
+  LOG(INFO) << "[" << model_name << "] ReleaseRequest received, uuid: "
+            << request_handle->request_uuid;
+  auto reply_promise = std::make_shared<std::promise<AsStatus>>();
+  std::string uuid = request_handle->request_uuid;
+  assert(model_state_map_[model_name].get() != nullptr);
+  auto& model_state = model_state_map_[model_name];
+
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemPostInterProcess();
+#endif
+  auto message = EngineControlMessage(EngineControlMessageId::ReleaseRequest,
+                                      reply_promise, uuid);
+  model_state->msg_queue.enqueue(std::move(message));
+
+  AsStatus status = reply_promise->get_future().get();
+  if (status == AsStatus::ALLSPARK_SUCCESS) {
+    LOG(INFO) << "[" << model_name << "] ReleaseRequest success with uuid: "
+              << uuid;
+  } else {
+    LOG(ERROR) << "[" << model_name << "] ReleaseRequest failed with error "
+               << static_cast<int>(status);
+  }
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+  return AsStatus::ALLSPARK_SUCCESS;
+}
+
+AsStatus AsEngineImpl::SyncRequest(const char* model_name,
+                                   RequestHandle* request_handle) {
+  std::lock_guard<std::mutex> lora_guard(lora_lock_);
+  LOG(INFO) << "[" << model_name << "] SyncRequest: "
+            << (request_handle == nullptr ? "all"
+                                          : request_handle->request_uuid);
+
+  auto reply_promise = std::make_shared<std::promise<AsStatus>>();
+  std::string uuid;
+  assert(model_state_map_[model_name].get() != nullptr);
+  auto& model_state = model_state_map_[model_name];
+
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemPostInterProcess();
+#endif
+  EngineControlMessageId message_id;
+  if (request_handle) {
+    uuid = request_handle->request_uuid;
+    message_id = EngineControlMessageId::SyncRequest;
+  } else {
+    uuid = "<ALL>";
+    message_id = EngineControlMessageId::SyncAllRequest;
+  }
+  auto message = EngineControlMessage(message_id, reply_promise, uuid);
+  model_state->msg_queue.enqueue(std::move(message));
+#ifndef ENABLE_CUDA
+  workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+
+  AsStatus status = reply_promise->get_future().get();
+  if (status == AsStatus::ALLSPARK_SUCCESS) {
+    DLOG(INFO) << "[" << model_name << "] SyncRequest success with uuid: "
+               << uuid;
+  } else {
+    LOG(ERROR) << "[" << model_name << "] SyncRequest failed with error "
+               << static_cast<int>(status);
+  }
+  return status;
+}
+
 }  // namespace allspark
