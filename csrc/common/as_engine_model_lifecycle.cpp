@@ -59,6 +59,8 @@ AsStatus AsEngineImpl::StopModel(const char* model_name) {
   LOG(INFO) << "AsEngineImpl:: send model stop message.";
   if (!model_state->msg_queue.enqueue(std::move(message))) {
     LOG(ERROR) << "push message queue failed.";
+    model_state->model_stopping = false;
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
   }
 
   LOG(INFO) << "AsEngineImpl:: wait stop model return";
