@@ -114,7 +114,25 @@ AsStatus AsEngineImpl::StartRequest(
   auto message = EngineControlMessage(EngineControlMessageId::StartRequest,
                                       reply_promise, uuid, handle, result_queue,
                                       request_info);
-  model_state->msg_queue.enqueue(std::move(message));
+  if (!model_state->msg_queue.enqueue(std::move(message))) {
+    LOG(ERROR) << "[" << model_name
+               << "] StartRequest failed to enqueue control message";
+#ifndef ENABLE_CUDA
+    workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+    if (!lora_name.empty()) {
+      std::lock_guard<std::mutex> usage_guard(lora_usage_lock_);
+      auto model_it = loras_in_use_.find(model_name);
+      if (model_it != loras_in_use_.end()) {
+        auto lora_it = model_it->second.find(lora_name);
+        if (lora_it != model_it->second.end()) {
+          model_it->second.erase(lora_it);
+          lora_use_count_--;
+        }
+      }
+    }
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
+  }
 #ifndef ENABLE_CUDA
   workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
 #endif
@@ -146,7 +164,14 @@ AsStatus AsEngineImpl::StopRequest(const char* model_name,
 #endif
   auto message = EngineControlMessage(EngineControlMessageId::StopRequest,
                                       reply_promise, uuid);
-  model_state->msg_queue.enqueue(std::move(message));
+  if (!model_state->msg_queue.enqueue(std::move(message))) {
+    LOG(ERROR) << "[" << model_name
+               << "] StopRequest failed to enqueue control message";
+#ifndef ENABLE_CUDA
+    workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
+  }
 #ifndef ENABLE_CUDA
   workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
 #endif
@@ -184,7 +209,14 @@ AsStatus AsEngineImpl::ReleaseRequest(const char* model_name,
 #endif
   auto message = EngineControlMessage(EngineControlMessageId::ReleaseRequest,
                                       reply_promise, uuid);
-  model_state->msg_queue.enqueue(std::move(message));
+  if (!model_state->msg_queue.enqueue(std::move(message))) {
+    LOG(ERROR) << "[" << model_name
+               << "] ReleaseRequest failed to enqueue control message";
+#ifndef ENABLE_CUDA
+    workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
+  }
 
   AsStatus status = reply_promise->get_future().get();
   if (status == AsStatus::ALLSPARK_SUCCESS) {
@@ -224,7 +256,14 @@ AsStatus AsEngineImpl::SyncRequest(const char* model_name,
     message_id = EngineControlMessageId::SyncAllRequest;
   }
   auto message = EngineControlMessage(message_id, reply_promise, uuid);
-  model_state->msg_queue.enqueue(std::move(message));
+  if (!model_state->msg_queue.enqueue(std::move(message))) {
+    LOG(ERROR) << "[" << model_name
+               << "] SyncRequest failed to enqueue control message";
+#ifndef ENABLE_CUDA
+    workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
+#endif
+    return AsStatus::ALLSPARK_RUNTIME_ERROR;
+  }
 #ifndef ENABLE_CUDA
   workers_[0]->GetDeviceContext()->SemWaitSendInterProcess();
 #endif
