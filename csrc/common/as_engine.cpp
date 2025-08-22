@@ -433,7 +433,7 @@ AsStatus AsEngineImpl::WarmupModelInternal_(
     LOG(INFO) << "warm-up: workers warming up...";
     ExpandRankThreadPool();
 
-    std::future<AsStatus> result[nranks_];
+    std::vector<std::future<AsStatus>> result(nranks_);
     for (int i = 0; i < nranks_; ++i) {
       result[i] = threadpool_->enqueue(
           i,
@@ -488,7 +488,7 @@ AsStatus AsEngineImpl::WarmupModel(const char* model_name) {
   // collect mem stats from all workers
   int64_t min_bytes_available = std::numeric_limits<int64_t>::max();
   if (use_adaptive_cache_) {
-    std::future<int64_t> result[nranks_];
+    std::vector<std::future<int64_t>> result(nranks_);
     for (int i = 0; i < nranks_; ++i) {
       result[i] = threadpool_->enqueue(i, [this, i]() -> int64_t {
         try {
@@ -570,7 +570,7 @@ AsStatus AsEngineImpl::RunTextGenerationContinue(const char* model_name) {
     return AsStatus::ALLSPARK_INVALID_CALL_ERROR;
   }
   AsStatus ret = AsStatus::ALLSPARK_SUCCESS;
-  std::future<AsStatus> result[nranks_];
+  std::vector<std::future<AsStatus>> result(nranks_);
   for (int i = 0; i < nranks_; ++i) {
     result[i] = threadpool_->enqueue(i, [this, i]() {
       try {
@@ -647,7 +647,7 @@ AsStatus AsEngineImpl::RunTextGenerationContext(const char* model_name,
     return AsStatus::ALLSPARK_INVALID_CALL_ERROR;
   }
   AsStatus ret = AsStatus::ALLSPARK_SUCCESS;
-  std::future<AsStatus> result[nranks_];
+  std::vector<std::future<AsStatus>> result(nranks_);
   for (int i = 0; i < nranks_; ++i) {
     result[i] = threadpool_->enqueue(i, [this, i, is_new_context]() {
       try {
@@ -726,7 +726,7 @@ AsStatus AsEngineImpl::StopRequestByRequestID(const char* model_name,
     return AsStatus::ALLSPARK_PARAM_ERROR;
   }
 
-  std::future<AsStatus> result[nranks_];
+  std::vector<std::future<AsStatus>> result(nranks_);
   for (int i = 0; i < nranks_; ++i) {
     result[i] = threadpool_->enqueue(i, [this, i, request_id]() {
       return workers_[i]->StopRequest(request_id);
@@ -764,7 +764,7 @@ AsStatus AsEngineImpl::ReleaseRequestByRequestID(
     return AsStatus::ALLSPARK_PARAM_ERROR;
   }
 
-  std::future<AsStatus> result[nranks_];
+  std::vector<std::future<AsStatus>> result(nranks_);
   for (int i = 0; i < nranks_; ++i) {
     result[i] = threadpool_->enqueue(i, [this, i, request_id]() {
       return workers_[i]->ReleaseRequest(request_id);
@@ -948,7 +948,7 @@ AsStatus AsEngineImpl::StartRequestImpl(
                                             Shape{1, engine_max_length_})});
   DLOG(INFO) << "[" << model_name << "] "
              << "AsEngineImpl::MultiGPU_StartRequestImpl()" << std::endl;
-  std::future<AsStatus> result[nranks_];
+  std::vector<std::future<AsStatus>> result(nranks_);
 
   std::string& uuid = request_handle->request_uuid;
 
