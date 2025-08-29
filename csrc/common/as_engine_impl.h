@@ -12,6 +12,7 @@
 #include <cache/prefix_cache_manager.h>
 #include <core/model/model.h>
 #include <interface/allspark.h>
+#include <pd/pd_role.h>
 #include <weight/weight_manager.h>
 
 #include <atomic>
@@ -124,6 +125,7 @@ class AsEngineImpl final {
                                   const std::vector<int>& request_lens, int n);
   AsStatus RunEngineContext(std::string model_name);
 
+  pd::PdRuntimeConfig pd_config_;
   bool is_device_id_set_ = false;
   bool is_multi_nodes_;
   int nranks_ = 1;

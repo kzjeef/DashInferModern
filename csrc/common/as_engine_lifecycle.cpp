@@ -16,7 +16,8 @@
 namespace allspark {
 
 AsEngineImpl::AsEngineImpl()
-    : device_ctx_(std::make_unique<CPUContext>()),
+    : pd_config_(pd::LoadPdRuntimeConfig()),
+      device_ctx_(std::make_unique<CPUContext>()),
       is_multi_nodes_(false),
       threadpool_size_(1),
       lora_use_count_(0) {
@@ -40,6 +41,7 @@ AsEngineImpl::AsEngineImpl()
   std::random_device rand_dev;
   random_engine.seed(rand_dev());
   LOG(INFO) << "AllSpark Init with Version: " << GetVersionFull();
+  LOG(INFO) << "PD runtime role: " << pd::PdRoleName(pd_config_.role);
 }
 
 AsEngineImpl::~AsEngineImpl() {

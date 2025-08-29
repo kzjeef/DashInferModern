@@ -17,6 +17,18 @@ AsStatus AsEngineImpl::StartModel(const char* model_name) {
   util::as_init_log();
   DLOG(INFO) << "[" << model_name << "] AsEngineImpl::StartModel";
 
+  if (!pd_config_.IsValid()) {
+    LOG(ERROR) << "Invalid PD configuration: role="
+               << pd::PdRoleName(pd_config_.role)
+               << ", control endpoint is required for separated roles";
+    return AsStatus::ALLSPARK_PARAM_ERROR;
+  }
+  if (pd_config_.IsSeparated()) {
+    LOG(ERROR) << "PD role " << pd::PdRoleName(pd_config_.role)
+               << " is configured but its control transport is not started";
+    return AsStatus::ALLSPARK_INVALID_CALL_ERROR;
+  }
+
   auto name = std::string(model_name);
   as_stat_ = std::make_unique<AsEngineStat>(name);
   model_state_map_[name] = std::make_shared<ModelControlState>(name);
