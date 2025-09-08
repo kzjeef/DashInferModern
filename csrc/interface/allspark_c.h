@@ -28,6 +28,38 @@ extern "C" {
 typedef int32_t as_status_t;
 typedef struct as_engine as_engine_t;
 
+typedef struct as_model_config {
+  uint32_t struct_size;
+  uint32_t api_version;
+
+  const char* model_name;
+  const char* model_path;
+  const char* weights_path;
+  const char* compute_unit;
+  const char* matmul_precision;
+
+  int32_t engine_max_length;
+  int32_t engine_max_batch;
+  int32_t engine_max_prefill_length;
+  int64_t swap_threshold;
+  int32_t num_threads;
+  int32_t cache_span_size;
+  int32_t cache_span_num_init;
+  int32_t cache_span_num_grow;
+  int32_t prefix_cache_ttl;
+
+  int32_t cache_mode;
+  int32_t prefill_mode;
+  int32_t eviction_strategy;
+  int32_t scheduling_strategy;
+
+  uint8_t text_graph;
+  uint8_t enable_prefix_cache;
+  uint8_t enable_sparsity_matmul;
+  uint8_t reserved_flags[5];
+  uint64_t reserved[8];
+} as_model_config_t;
+
 enum as_status_code {
   AS_STATUS_SUCCESS = 0,
   AS_STATUS_UNKNOWN_ERROR = 1,
@@ -69,6 +101,20 @@ AS_C_API as_status_t as_engine_get_version(as_engine_t* engine, char* buffer,
 
 /** Return a static name for a status code. */
 AS_C_API const char* as_status_string(as_status_t status);
+
+/** Fill a versioned model configuration with engine defaults. */
+AS_C_API void as_model_config_init(as_model_config_t* config);
+
+/** Build a model from serialized graph and weight paths. */
+AS_C_API as_status_t as_engine_build_model(
+    as_engine_t* engine, const as_model_config_t* config);
+
+AS_C_API as_status_t as_engine_start_model(as_engine_t* engine,
+                                           const char* model_name);
+AS_C_API as_status_t as_engine_stop_model(as_engine_t* engine,
+                                          const char* model_name);
+AS_C_API as_status_t as_engine_release_model(as_engine_t* engine,
+                                             const char* model_name);
 
 #ifdef __cplusplus
 }  // extern "C"
