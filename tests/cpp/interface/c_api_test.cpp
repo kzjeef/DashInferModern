@@ -47,3 +47,39 @@ TEST(CApiTest, ReturnsStableStatusNames) {
                "AS_STATUS_RUNTIME_ERROR");
   EXPECT_STREQ(as_status_string(-1), "AS_STATUS_UNDEFINED");
 }
+
+TEST(CApiTest, InitializesVersionedModelConfig) {
+  as_model_config_t config;
+  as_model_config_init(&config);
+
+  EXPECT_EQ(config.struct_size, sizeof(config));
+  EXPECT_EQ(config.api_version, AS_C_API_VERSION);
+  EXPECT_EQ(config.engine_max_length, 2048);
+  EXPECT_EQ(config.engine_max_batch, 32);
+  EXPECT_EQ(config.swap_threshold, -1);
+  EXPECT_EQ(config.cache_span_size, 128);
+  EXPECT_EQ(config.enable_prefix_cache, 1);
+  EXPECT_STREQ(config.compute_unit, "CUDA:0");
+  EXPECT_STREQ(config.matmul_precision, "highest");
+}
+
+TEST(CApiTest, RejectsIncompleteModelConfig) {
+  as_engine_t* engine = nullptr;
+  ASSERT_EQ(as_engine_create(&engine), AS_STATUS_SUCCESS);
+
+  as_model_config_t config;
+  as_model_config_init(&config);
+  EXPECT_EQ(as_engine_build_model(engine, &config), AS_STATUS_PARAM_ERROR);
+
+  config.model_name = "mini";
+  config.model_path = "mini.asgraph";
+  config.weights_path = "mini.asparam";
+  config.cache_mode = 99;
+  EXPECT_EQ(as_engine_build_model(engine, &config), AS_STATUS_PARAM_ERROR);
+
+  EXPECT_EQ(as_engine_start_model(nullptr, "mini"), AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(as_engine_stop_model(engine, nullptr), AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(as_engine_release_model(engine, ""), AS_STATUS_PARAM_ERROR);
+
+  as_engine_destroy(engine);
+}
