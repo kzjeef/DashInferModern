@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "dlpack.h"
+
 #if defined(_WIN32)
 #if defined(ALLSPARK_C_EXPORTS)
 #define AS_C_API __declspec(dllexport)
@@ -27,6 +29,32 @@ extern "C" {
 
 typedef int32_t as_status_t;
 typedef struct as_engine as_engine_t;
+typedef struct as_request as_request_t;
+
+typedef struct as_named_tensor {
+  const char* name;
+  DLManagedTensor* tensor;
+} as_named_tensor_t;
+
+typedef struct as_generate_config {
+  uint32_t struct_size;
+  uint32_t api_version;
+  int32_t max_length;
+  int32_t min_length;
+  int32_t eos_token_id;
+  int32_t top_k;
+  float top_p;
+  float temperature;
+  float repetition_penalty;
+  float presence_penalty;
+  float frequency_penalty;
+  uint64_t seed;
+  uint8_t do_sample;
+  uint8_t early_stopping;
+  uint8_t reserved_flags[6];
+  const char* lora_name;
+  uint64_t reserved[8];
+} as_generate_config_t;
 
 typedef struct as_model_config {
   uint32_t struct_size;
@@ -115,6 +143,24 @@ AS_C_API as_status_t as_engine_stop_model(as_engine_t* engine,
                                           const char* model_name);
 AS_C_API as_status_t as_engine_release_model(as_engine_t* engine,
                                              const char* model_name);
+
+/** Fill a versioned generation configuration with engine defaults. */
+AS_C_API void as_generate_config_init(as_generate_config_t* config);
+
+/** Start one asynchronous generation request. Input tensors are borrowed. */
+AS_C_API as_status_t as_engine_start_request(
+    as_engine_t* engine, const char* model_name,
+    const as_named_tensor_t* inputs, size_t input_count,
+    const as_generate_config_t* config, as_request_t** request);
+
+AS_C_API as_status_t as_engine_stop_request(as_engine_t* engine,
+                                            as_request_t* request);
+AS_C_API as_status_t as_engine_sync_request(as_engine_t* engine,
+                                            as_request_t* request);
+
+/** Release the engine request and invalidate the opaque request handle. */
+AS_C_API as_status_t as_engine_release_request(as_engine_t* engine,
+                                               as_request_t* request);
 
 #ifdef __cplusplus
 }  // extern "C"
