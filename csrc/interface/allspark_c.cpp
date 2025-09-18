@@ -15,6 +15,13 @@ struct as_engine {
   allspark::AsEngine engine;
 };
 
+struct as_request {
+  as_engine_t* owner = nullptr;
+  std::string model_name;
+  allspark::RequestHandle_t handle = nullptr;
+  allspark::AsEngine::ResultQueue_t queue = nullptr;
+};
+
 namespace {
 
 as_status_t ToCStatus(allspark::AsStatus status) {
@@ -54,6 +61,23 @@ void as_model_config_init(as_model_config_t* config) {
   config->cache_span_size = 128;
   config->prefix_cache_ttl = 300;
   config->enable_prefix_cache = 1;
+}
+
+void as_generate_config_init(as_generate_config_t* config) {
+  if (config == nullptr) {
+    return;
+  }
+  std::memset(config, 0, sizeof(*config));
+  config->struct_size = sizeof(*config);
+  config->api_version = AS_C_API_VERSION;
+  config->max_length = 20;
+  config->eos_token_id = 102;
+  config->top_k = 50;
+  config->top_p = 1.0f;
+  config->temperature = 1.0f;
+  config->repetition_penalty = 1.0f;
+  config->do_sample = 1;
+  config->early_stopping = 1;
 }
 
 as_status_t as_engine_create(as_engine_t** engine) {
@@ -225,6 +249,113 @@ as_status_t as_engine_release_model(as_engine_t* engine,
   }
   return GuardCAbi([engine, model_name]() {
     return ToCStatus(engine->engine.ReleaseModel(model_name));
+  });
+}
+
+as_status_t as_engine_start_request(as_engine_t* engine,
+                                    const char* model_name,
+                                    const as_named_tensor_t* inputs,
+                                    size_t input_count,
+                                    const as_generate_config_t* config,
+                                    as_request_t** request) {
+  if (request != nullptr) {
+    *request = nullptr;
+  }
+  if (engine == nullptr || model_name == nullptr || model_name[0] == '\0' ||
+      inputs == nullptr || input_count == 0 || config == nullptr ||
+      request == nullptr ||
+      config->struct_size < sizeof(as_generate_config_t) ||
+      config->api_version != AS_C_API_VERSION) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+
+  return GuardCAbi([=]() -> as_status_t {
+    auto input_map = std::make_shared<allspark::DLTensorMap>();
+    for (size_t i = 0; i < input_count; ++i) {
+      if (inputs[i].name == nullptr || inputs[i].name[0] == '\0' ||
+          inputs[i].tensor == nullptr) {
+        return AS_STATUS_PARAM_ERROR;
+      }
+      if (!input_map->emplace(inputs[i].name, inputs[i].tensor).second) {
+        return AS_STATUS_PARAM_ERROR;
+      }
+    }
+    if (input_map->count("input_ids") == 0) {
+      return AS_STATUS_PARAM_ERROR;
+    }
+
+    auto request_content =
+        std::make_shared<allspark::AsEngine::RequestContent>();
+    request_content->infer_type =
+        allspark::AsEngine::RequestInferType::Generate;
+    request_content->mm_type = allspark::AsEngine::RequestMMType::TextInput;
+    request_content->inputs = std::move(input_map);
+    request_content->config.max_length = config->max_length;
+    request_content->config.min_length = config->min_length;
+    request_content->config.eos_token_id = config->eos_token_id;
+    request_content->config.top_k = config->top_k;
+    request_content->config.top_p = config->top_p;
+    request_content->config.temperature = config->temperature;
+    request_content->config.repetition_penalty = config->repetition_penalty;
+    request_content->config.presence_penalty = config->presence_penalty;
+    request_content->config.frequency_penalty = config->frequency_penalty;
+    request_content->config.seed = config->seed;
+    request_content->config.do_sample = config->do_sample != 0;
+    request_content->config.early_stopping = config->early_stopping != 0;
+    request_content->config.lora_name =
+        config->lora_name == nullptr ? "" : config->lora_name;
+
+    auto wrapper = std::make_unique<as_request>();
+    wrapper->owner = engine;
+    wrapper->model_name = model_name;
+    const as_status_t status = ToCStatus(engine->engine.StartRequest(
+        model_name, std::move(request_content), &wrapper->handle,
+        &wrapper->queue));
+    if (status != AS_STATUS_SUCCESS) {
+      return status;
+    }
+    *request = wrapper.release();
+    return AS_STATUS_SUCCESS;
+  });
+}
+
+as_status_t as_engine_stop_request(as_engine_t* engine,
+                                   as_request_t* request) {
+  if (engine == nullptr || request == nullptr || request->owner != engine ||
+      request->handle == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([engine, request]() {
+    return ToCStatus(engine->engine.StopRequest(request->model_name.c_str(),
+                                                request->handle));
+  });
+}
+
+as_status_t as_engine_sync_request(as_engine_t* engine,
+                                   as_request_t* request) {
+  if (engine == nullptr || request == nullptr || request->owner != engine ||
+      request->handle == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([engine, request]() {
+    return ToCStatus(engine->engine.SyncRequest(request->model_name.c_str(),
+                                                request->handle));
+  });
+}
+
+as_status_t as_engine_release_request(as_engine_t* engine,
+                                      as_request_t* request) {
+  if (engine == nullptr || request == nullptr || request->owner != engine ||
+      request->handle == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([engine, request]() {
+    const as_status_t status = ToCStatus(engine->engine.ReleaseRequest(
+        request->model_name.c_str(), request->handle));
+    if (status == AS_STATUS_SUCCESS) {
+      delete request;
+    }
+    return status;
   });
 }
 
