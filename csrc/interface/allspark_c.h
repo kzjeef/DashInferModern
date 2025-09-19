@@ -111,6 +111,15 @@ enum as_status_code {
   AS_STATUS_STREAMING = 200,
 };
 
+enum as_request_status {
+  AS_REQUEST_INIT = 0,
+  AS_REQUEST_CONTEXT_FINISHED = 1,
+  AS_REQUEST_GENERATING = 2,
+  AS_REQUEST_FINISHED = 3,
+  AS_REQUEST_INTERRUPTED = 4,
+  AS_REQUEST_INTERNAL_ERROR = 5,
+};
+
 /** Allocate an engine and return it through `engine`. */
 AS_C_API as_status_t as_engine_create(as_engine_t** engine);
 
@@ -161,6 +170,23 @@ AS_C_API as_status_t as_engine_sync_request(as_engine_t* engine,
 /** Release the engine request and invalidate the opaque request handle. */
 AS_C_API as_status_t as_engine_release_request(as_engine_t* engine,
                                                as_request_t* request);
+
+AS_C_API as_status_t as_request_get_status(const as_request_t* request,
+                                           int32_t* status);
+AS_C_API as_status_t as_request_generated_length(const as_request_t* request,
+                                                 size_t* length);
+
+/**
+ * Fetch one batch of generated token ids.
+ *
+ * `timeout_ms` is zero for a poll, positive for a bounded wait, and negative
+ * for an unbounded wait. Use a NULL token buffer to query the required count;
+ * the batch remains pending until copied successfully.
+ */
+AS_C_API as_status_t as_request_fetch_tokens(as_request_t* request,
+                                             int32_t timeout_ms,
+                                             int64_t* tokens,
+                                             size_t* token_count);
 
 #ifdef __cplusplus
 }  // extern "C"

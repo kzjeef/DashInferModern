@@ -7,6 +7,7 @@
 
 #include "allspark.h"
 
+#include <algorithm>
 #include <cstring>
 #include <exception>
 #include <new>
@@ -20,6 +21,7 @@ struct as_request {
   std::string model_name;
   allspark::RequestHandle_t handle = nullptr;
   allspark::AsEngine::ResultQueue_t queue = nullptr;
+  std::shared_ptr<allspark::AsEngine::GeneratedElements> pending_result;
 };
 
 namespace {
@@ -356,6 +358,69 @@ as_status_t as_engine_release_request(as_engine_t* engine,
       delete request;
     }
     return status;
+  });
+}
+
+as_status_t as_request_get_status(const as_request_t* request,
+                                  int32_t* status) {
+  if (request == nullptr || request->queue == nullptr || status == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([request, status]() {
+    *status = static_cast<int32_t>(request->queue->GenerateStatus());
+    return AS_STATUS_SUCCESS;
+  });
+}
+
+as_status_t as_request_generated_length(const as_request_t* request,
+                                        size_t* length) {
+  if (request == nullptr || request->queue == nullptr || length == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([request, length]() {
+    *length = request->queue->GeneratedLength();
+    return AS_STATUS_SUCCESS;
+  });
+}
+
+as_status_t as_request_fetch_tokens(as_request_t* request, int32_t timeout_ms,
+                                    int64_t* tokens, size_t* token_count) {
+  if (request == nullptr || request->queue == nullptr ||
+      token_count == nullptr) {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([=]() -> as_status_t {
+    if (request->pending_result == nullptr) {
+      if (timeout_ms < 0) {
+        request->pending_result = request->queue->Get();
+      } else if (timeout_ms == 0) {
+        request->pending_result = request->queue->GetNoWait();
+      } else {
+        request->pending_result = request->queue->Get(timeout_ms);
+      }
+    }
+    if (request->pending_result == nullptr) {
+      *token_count = 0;
+      return AS_STATUS_EMPTY_REQUEST;
+    }
+
+    const auto& ids = request->pending_result->ids_from_generate;
+    const size_t required = ids.size();
+    const size_t available = *token_count;
+    *token_count = required;
+    if (required == 0) {
+      request->pending_result.reset();
+      return AS_STATUS_SUCCESS;
+    }
+    if (tokens == nullptr) {
+      return AS_STATUS_SUCCESS;
+    }
+    if (available < required) {
+      return AS_STATUS_EXCEED_LIMIT;
+    }
+    std::copy(ids.begin(), ids.end(), tokens);
+    request->pending_result.reset();
+    return AS_STATUS_SUCCESS;
   });
 }
 
