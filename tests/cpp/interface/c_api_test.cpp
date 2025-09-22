@@ -83,3 +83,48 @@ TEST(CApiTest, RejectsIncompleteModelConfig) {
 
   as_engine_destroy(engine);
 }
+
+TEST(CApiTest, InitializesGenerationConfig) {
+  as_generate_config_t config;
+  as_generate_config_init(&config);
+
+  EXPECT_EQ(config.struct_size, sizeof(config));
+  EXPECT_EQ(config.api_version, AS_C_API_VERSION);
+  EXPECT_EQ(config.max_length, 20);
+  EXPECT_EQ(config.eos_token_id, 102);
+  EXPECT_EQ(config.top_k, 50);
+  EXPECT_FLOAT_EQ(config.top_p, 1.0f);
+  EXPECT_FLOAT_EQ(config.temperature, 1.0f);
+  EXPECT_FLOAT_EQ(config.repetition_penalty, 1.0f);
+  EXPECT_EQ(config.do_sample, 1);
+  EXPECT_EQ(config.early_stopping, 1);
+}
+
+TEST(CApiTest, RejectsInvalidRequestArguments) {
+  as_engine_t* engine = nullptr;
+  ASSERT_EQ(as_engine_create(&engine), AS_STATUS_SUCCESS);
+
+  as_generate_config_t config;
+  as_generate_config_init(&config);
+  as_request_t* request = reinterpret_cast<as_request_t*>(1);
+  EXPECT_EQ(as_engine_start_request(engine, "mini", nullptr, 0, &config,
+                                    &request),
+            AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(request, nullptr);
+
+  as_named_tensor_t invalid_input{"input_ids", nullptr};
+  EXPECT_EQ(as_engine_start_request(engine, "mini", &invalid_input, 1,
+                                    &config, &request),
+            AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(request, nullptr);
+
+  int32_t status = -1;
+  size_t length = 0;
+  EXPECT_EQ(as_request_get_status(nullptr, &status), AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(as_request_generated_length(nullptr, &length),
+            AS_STATUS_PARAM_ERROR);
+  EXPECT_EQ(as_request_fetch_tokens(nullptr, 0, nullptr, &length),
+            AS_STATUS_PARAM_ERROR);
+
+  as_engine_destroy(engine);
+}
