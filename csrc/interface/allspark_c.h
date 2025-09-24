@@ -153,6 +153,13 @@ AS_C_API as_status_t as_engine_stop_model(as_engine_t* engine,
 AS_C_API as_status_t as_engine_release_model(as_engine_t* engine,
                                              const char* model_name);
 
+AS_C_API as_status_t as_engine_load_lora(as_engine_t* engine,
+                                         const char* model_name,
+                                         const char* lora_name_or_path);
+AS_C_API as_status_t as_engine_unload_lora(as_engine_t* engine,
+                                           const char* model_name,
+                                           const char* lora_name);
+
 /** Fill a versioned generation configuration with engine defaults. */
 AS_C_API void as_generate_config_init(as_generate_config_t* config);
 

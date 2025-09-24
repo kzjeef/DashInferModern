@@ -254,6 +254,29 @@ as_status_t as_engine_release_model(as_engine_t* engine,
   });
 }
 
+as_status_t as_engine_load_lora(as_engine_t* engine, const char* model_name,
+                                const char* lora_name_or_path) {
+  if (engine == nullptr || model_name == nullptr || model_name[0] == '\0' ||
+      lora_name_or_path == nullptr || lora_name_or_path[0] == '\0') {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([engine, model_name, lora_name_or_path]() {
+    return ToCStatus(
+        engine->engine.LoadLoraByName(model_name, lora_name_or_path));
+  });
+}
+
+as_status_t as_engine_unload_lora(as_engine_t* engine, const char* model_name,
+                                  const char* lora_name) {
+  if (engine == nullptr || model_name == nullptr || model_name[0] == '\0' ||
+      lora_name == nullptr || lora_name[0] == '\0') {
+    return AS_STATUS_PARAM_ERROR;
+  }
+  return GuardCAbi([engine, model_name, lora_name]() {
+    return ToCStatus(engine->engine.UnloadLoraByName(model_name, lora_name));
+  });
+}
+
 as_status_t as_engine_start_request(as_engine_t* engine,
                                     const char* model_name,
                                     const as_named_tensor_t* inputs,
