@@ -209,6 +209,10 @@ endif()
 
 add_subdirectory(csrc)
 
+if (BUILD_EXAMPLE)
+    add_subdirectory(examples/c)
+endif()
+
 if (BUILD_UTEST)
     enable_testing()
     add_subdirectory(tests/cpp)
