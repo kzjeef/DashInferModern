@@ -26,6 +26,36 @@ struct as_request {
 
 namespace {
 
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_SUCCESS) ==
+              AS_STATUS_SUCCESS);
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_PARAM_ERROR) ==
+              AS_STATUS_PARAM_ERROR);
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_RUNTIME_ERROR) ==
+              AS_STATUS_RUNTIME_ERROR);
+static_assert(
+    static_cast<int>(allspark::AsStatus::ALLSPARK_CACHE_MEMORY_OUT) ==
+    AS_STATUS_CACHE_MEMORY_OUT);
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_REQUEST_DENIED) ==
+              AS_STATUS_REQUEST_DENIED);
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_LORA_NOT_FOUND) ==
+              AS_STATUS_LORA_NOT_FOUND);
+static_assert(
+    static_cast<int>(allspark::AsStatus::ALLSPARK_LORA_ALREADY_LOADED) ==
+    AS_STATUS_LORA_ALREADY_LOADED);
+static_assert(static_cast<int>(allspark::AsStatus::ALLSPARK_LORA_IN_USE) ==
+              AS_STATUS_LORA_IN_USE);
+static_assert(
+    static_cast<int>(allspark::AsEngine::GenerateRequestStatus::Init) ==
+    AS_REQUEST_INIT);
+static_assert(
+    static_cast<int>(
+        allspark::AsEngine::GenerateRequestStatus::GenerateFinished) ==
+    AS_REQUEST_FINISHED);
+static_assert(
+    static_cast<int>(
+        allspark::AsEngine::GenerateRequestStatus::GenerateInterrupted) ==
+    AS_REQUEST_INTERRUPTED);
+
 as_status_t ToCStatus(allspark::AsStatus status) {
   return static_cast<as_status_t>(status);
 }
