@@ -20,6 +20,7 @@ from ._allspark import AsModelConfig
 from .quant.gptq_iq_adapter import GPTQ2IQWeightAdapter
 from .quantization import QuantizeConfig
 from ._allspark import VocabType
+from .fp8_config import detect_native_fp8
 from .nvfp4_config import detect_modelopt_nvfp4
 
 
@@ -381,6 +382,7 @@ class HuggingFaceModel(LLM):
         self.hf_model_path = pretrain_model_name_or_path
         self.pretain_model_name = pretrain_model_name
         self.in_memory_serialize = in_memory_serialize
+        self.fp8_config = detect_native_fp8(self.hf_model_path)
         self.nvfp4_config = detect_modelopt_nvfp4(self.hf_model_path)
         # For JSON Mode
         self.vocab = None
@@ -414,7 +416,12 @@ class HuggingFaceModel(LLM):
         Return self
         """
         kwargs["device_map"] = "cpu"
+        self.fp8_config = detect_native_fp8(self.hf_model_path)
         self.nvfp4_config = detect_modelopt_nvfp4(self.hf_model_path)
+        if self.fp8_config["enabled"] and not direct_load:
+            raise ValueError(
+                "Native FP8 checkpoints require direct_load=True so FP8 "
+                "weights and scale tensors remain intact")
         if self.nvfp4_config["enabled"] and not direct_load:
             raise ValueError(
                 "ModelOpt NVFP4 checkpoints require direct_load=True so "
@@ -469,6 +476,12 @@ class HuggingFaceModel(LLM):
 
         # init the model config
         self.read_model_config()
+        if self.fp8_config["enabled"]:
+            self.as_model_config["is_fp8_model"] = True
+            self.as_model_config["fp8_quant_method"] = \
+                self.fp8_config["format"]
+            self.as_model_config["fp8_block_size"] = list(
+                self.fp8_config["block_size"])
         if self.nvfp4_config["enabled"]:
             self.as_model_config["is_fp4_model"] = True
             self.as_model_config["fp4_quant_method"] = "nvfp4"
