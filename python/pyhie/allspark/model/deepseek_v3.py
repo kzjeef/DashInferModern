@@ -6,6 +6,7 @@ from .model_base import *
 from .utils import WeightNameAdapter
 from ..quantization import *
 from .quantization_utils import *
+from .fp8_weights import merge_fp8_linears
 from .nvfp4_weights import (
     NVFP4_AUX_SUFFIXES,
     merge_nvfp4_linears,
@@ -25,6 +26,16 @@ class DeepSeek_v3(Model):
                                                    dtype=np.int64)))
         self.model.outputs.append(make_tensor("last_hidden_state"))
         self.is_generate = kwargs.get('is_generate', True)
+        self.is_fp8_blockwise = (
+            self.model_config.get("is_fp8_model", False)
+            and self.model_config.get("fp8_quant_method") == "blockwise")
+        self.fp8_block_size = tuple(self.model_config.get(
+            "fp8_block_size", (128, 128)))
+        self.fp8_native_weights = set()
+        if (self.model_config.get("is_fp8_model", False)
+                and not self.is_fp8_blockwise):
+            raise ValueError(
+                "DeepSeek-V3 currently requires native block-wise FP8")
         self.is_nvfp4 = (
             self.model_config.get("is_fp4_model", False)
             and self.model_config.get("fp4_quant_method") == "nvfp4")
@@ -58,7 +69,15 @@ class DeepSeek_v3(Model):
                 up_proj_key = key.replace("gate_proj", "up_proj")
                 if up_proj_key in torch_model:
                     new_key = key.replace("gate_proj", "gate_up_proj")
-                    if self.is_nvfp4 and torch_model[key].dtype == torch.uint8:
+                    if self.is_fp8_blockwise:
+                        merge_fp8_linears(
+                            torch_model,
+                            key,
+                            up_proj_key,
+                            new_key,
+                            self.fp8_block_size)
+                    elif (self.is_nvfp4 and
+                          torch_model[key].dtype == torch.uint8):
                         merge_nvfp4_linears(
                             torch_model,
                             key,
