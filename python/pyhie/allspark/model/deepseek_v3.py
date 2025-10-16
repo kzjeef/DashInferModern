@@ -548,6 +548,20 @@ class DeepSeek_v3(Model):
             for op in graph.ops:
                 quantize_op(op, self.quant_config, self.quantize_map)
 
+        if self.is_fp8_blockwise and not self.do_dynamic_quantize_convert:
+            for op in graph.ops:
+                if (not op.op_type.upper().startswith("GEMM")
+                        or not op.weights
+                        or op.weights[0].name not in self.weight_name_map):
+                    continue
+                torch_name = self.weight_name_map[op.weights[0].name]
+                if (not isinstance(torch_name, str)
+                        or torch_name + "_scale_inv"
+                        not in self.weight_real_names):
+                    continue
+                quantize_gemm_fp8_blockwise(op, self.fp8_block_size)
+                self.fp8_native_weights.add(op.weights[0].name)
+
         if self.is_nvfp4 and not self.do_dynamic_quantize_convert:
             for op in graph.ops:
                 if (not op.op_type.upper().startswith("GEMM")

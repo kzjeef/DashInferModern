@@ -97,6 +97,25 @@ def quantize_gemm_nvfp4_blockwise(op, block_size=16):
         block_size).astype("int32").tobytes()
     return op
 
+
+def quantize_gemm_fp8_blockwise(op, block_size=(128, 128)):
+    """Bind one graph GEMM to native FP8 codes and inverse block scales."""
+    if len(block_size) != 2 or min(int(v) for v in block_size) <= 0:
+        raise ValueError("FP8 block_size must contain two positive integers")
+    quant_op_type = "GemmFP8Blockwise"
+    if op.op_type.upper() == "GEMM":
+        op.op_type = quant_op_type
+    else:
+        op.attr["InnerGemmType"] = quant_op_type.encode()
+
+    weight_name = op.weights[0].name
+    op.weights.insert(1, make_tensor(weight_name + ".scale_inv"))
+    op.attr["fp8_block_m"] = np.array(
+        block_size[0]).astype("int32").tobytes()
+    op.attr["fp8_block_n"] = np.array(
+        block_size[1]).astype("int32").tobytes()
+    return op
+
 def quantize_moe(op, quant_config, orig_weight_name = None):
     if quant_config.quantize_mode in [
             QuantizeConfig.QuantMode.A16W8, QuantizeConfig.QuantMode.A16W4, QuantizeConfig.QuantMode.A8W8,
