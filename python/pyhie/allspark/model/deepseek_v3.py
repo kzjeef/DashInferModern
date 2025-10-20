@@ -6,7 +6,7 @@ from .model_base import *
 from .utils import WeightNameAdapter
 from ..quantization import *
 from .quantization_utils import *
-from .fp8_weights import merge_fp8_linears
+from .fp8_weights import merge_fp8_linears, validate_fp8_linear
 from .nvfp4_weights import (
     NVFP4_AUX_SUFFIXES,
     merge_nvfp4_linears,
@@ -681,6 +681,35 @@ class DeepSeek_v3(Model):
             k for k, v in Model.dtype_dict.items() if v == self.dtype
         ][0]
         for key, torch_name in weight_name_map.items():
+            if (not lora_name and self.is_fp8_blockwise
+                    and key in self.fp8_native_weights):
+                if not isinstance(torch_name, str):
+                    raise ValueError(
+                        "FP8 graph GEMM weights must map to one tensor")
+                validate_fp8_linear(
+                    torch_weight, torch_name, self.fp8_block_size)
+
+                mode = DENSE if key not in sparse_map else sparse_map[key]
+                split_mode = (NOSPLIT if key not in split_map
+                              else split_map[key])
+                if split_mode != NOSPLIT:
+                    raise ValueError(
+                        "FP8 block-scale splitting is not available; "
+                        "serialize the miniature model with "
+                        "multinode_mode=False")
+
+                source_scale = torch_name + "_scale_inv"
+                save_torch_to_allsparky(
+                    weights_path, key, torch_weight[torch_name].cpu(),
+                    mode, NOSPLIT, [])
+                save_torch_to_allsparky(
+                    weights_path, key + ".scale_inv",
+                    torch_weight[source_scale].cpu().contiguous(),
+                    mode, NOSPLIT, [])
+                torch_weight[source_scale] = torch.Tensor(0)
+                torch_weight[torch_name] = torch.Tensor(0)
+                continue
+
             if (not lora_name and self.is_nvfp4
                     and key in self.nvfp4_native_weights):
                 if not isinstance(torch_name, str):
