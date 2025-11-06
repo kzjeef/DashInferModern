@@ -6,14 +6,13 @@ import os
 import torch
 import glob
 import warnings
-from modelscope import snapshot_download
-from transformers import Qwen2VLForConditionalGeneration, AutoConfig, AutoTokenizer
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
+from transformers import AutoConfig, AutoProcessor, AutoTokenizer
 from tqdm import tqdm
 from safetensors.torch import safe_open
 from dashinfer import allspark
 from dashinfer.allspark.model_loader import HuggingFaceModel, ModelSerializerException
 from dashinfer.allspark.model_config import QWen2ConfigAdapter
+from .vl_model_config import detect_vl_model, get_vision_config
 try:
     from .trt.onnx_to_plan import ONNX_TRT
 except Exception:
@@ -28,6 +27,16 @@ def dtype_to_torch_dtype(dtype):
         return torch.bfloat16
     else:
         raise ValueError("unsupported data type: {}".format(dtype))
+
+
+def _conditional_generation_class(model_spec):
+    if model_spec.family == "qwen2_5_vl":
+        from transformers import Qwen2_5_VLForConditionalGeneration
+        return Qwen2_5_VLForConditionalGeneration
+    if model_spec.family == "qwen2_vl":
+        from transformers import Qwen2VLForConditionalGeneration
+        return Qwen2VLForConditionalGeneration
+    raise ValueError(f"unsupported model family: {model_spec.family}")
 
 
 class HuggingFaceVLModel(HuggingFaceModel):
@@ -51,6 +60,8 @@ class HuggingFaceVLModel(HuggingFaceModel):
 
         self.vision_engine = vision_engine
         self.quant_type = quant_type
+        self.processor = None
+        self.vl_model_spec = None
 
     def load_model(
         self, override_data_type=None, direct_load=False, load_format="auto", **kwargs
@@ -59,25 +70,33 @@ class HuggingFaceVLModel(HuggingFaceModel):
             # the open-source model can be loaded by huggingface
             try:
                 if not os.path.isdir(self.hf_model_path):
+                    from modelscope import snapshot_download
                     self.hf_model_path = snapshot_download(self.hf_model_path)
-                self.torch_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                self.hf_model_config = AutoConfig.from_pretrained(
+                    self.hf_model_path,
+                    trust_remote_code=self.trust_remote_code,
+                )
+                self.vl_model_spec = detect_vl_model(self.hf_model_config)
+                model_class = _conditional_generation_class(self.vl_model_spec)
+                self.torch_model = model_class.from_pretrained(
                     self.hf_model_path,
                     trust_remote_code=self.trust_remote_code,
                     torch_dtype=dtype_to_torch_dtype(self.data_type),
                     device_map="cpu",
                     **kwargs,
                 ).eval()
-                self.vit_config = Qwen2VLVisionConfig.from_pretrained(
-                    self.hf_model_path,
-                    trust_remote_code=True,
-                    revision=None,
-                    code_revision=None,
-                )
+                self.vit_config = get_vision_config(self.hf_model_config)
                 self.tokenizer = AutoTokenizer.from_pretrained(
                     self.hf_model_path,
                     trust_remote_code=self.trust_remote_code,
                     **kwargs,
                 )
+                if self.vl_model_spec.family == "qwen2_5_vl":
+                    self.processor = AutoProcessor.from_pretrained(
+                        self.hf_model_path,
+                        trust_remote_code=self.trust_remote_code,
+                        **kwargs,
+                    )
             except Exception as e:
                 print(
                     f"exception when load model: {self.hf_model_path} , exception: {e}"
@@ -88,7 +107,7 @@ class HuggingFaceVLModel(HuggingFaceModel):
             self.torch_model_state_dict = self.torch_model.state_dict()
             self.torch_model = None
         else:
-            NotImplementedError("direct_load from vl is not implemented!")
+            raise NotImplementedError("direct_load from vl is not implemented")
 
         self.read_model_config()
 
@@ -127,12 +146,15 @@ class HuggingFaceVLModel(HuggingFaceModel):
             onnx_trt_obj.export_onnx(onnxFile)
             onnx_trt_obj.generate_trt_engine(onnxFile, self.vision_model_path)
         elif self.vision_engine == "transformers":
-            visual_model = Qwen2VLForConditionalGeneration.from_pretrained(
+            if self.vl_model_spec is None:
+                self.vl_model_spec = detect_vl_model(self.hf_model_config)
+            model_class = _conditional_generation_class(self.vl_model_spec)
+            visual_model = model_class.from_pretrained(
                     self.hf_model_path,
                     trust_remote_code=self.trust_remote_code,
                     torch_dtype=dtype_to_torch_dtype(self.data_type),
                     device_map="cpu",
-                    attn_implementation="flash_attention_2",
+                    attn_implementation="sdpa",
                 ).visual.eval()
             self.vision_model_path = visual_model
         else:
