@@ -12,7 +12,7 @@ from safetensors.torch import safe_open
 from dashinfer import allspark
 from dashinfer.allspark.model_loader import HuggingFaceModel, ModelSerializerException
 from dashinfer.allspark.model_config import QWen2ConfigAdapter
-from .vl_model_config import detect_vl_model, get_vision_config
+from .vl_model_config import detect_vl_model, get_text_config, get_vision_config
 try:
     from .trt.onnx_to_plan import ONNX_TRT
 except Exception:
@@ -121,10 +121,16 @@ class HuggingFaceVLModel(HuggingFaceModel):
             self.hf_model_config = AutoConfig.from_pretrained(
                 self.hf_model_path, trust_remote_code=self.trust_remote_code
             )
-            self.adapter = QWen2ConfigAdapter(self.hf_model_config)
-            self.as_model_config = self.adapter.model_config
-            if self.user_set_data_type is None:
-                self.data_type = self.adapter.get_model_data_type()
+        self.vl_model_spec = detect_vl_model(self.hf_model_config)
+        text_config = get_text_config(self.hf_model_config)
+        if getattr(text_config, "torch_dtype", None) is None:
+            text_config.torch_dtype = self.hf_model_config.torch_dtype
+        if not getattr(text_config, "architectures", None):
+            text_config.architectures = ["Qwen2ForCausalLM"]
+        self.adapter = QWen2ConfigAdapter(text_config)
+        self.as_model_config = self.adapter.model_config
+        if self.user_set_data_type is None:
+            self.data_type = self.adapter.get_model_data_type()
         return self
 
     def serialize(
