@@ -10,6 +10,7 @@ import torch
 import requests
 from ..qwen_vl_status import VLStatusCode
 from ..cache.local_cache import LocalCache
+from ..config import normalize_model_type
 from functools import lru_cache
 import random
 import base64
@@ -352,7 +353,9 @@ class Preprocessor:
             self.workers = 0
             self.use_cuda = False
             logging.warning("force using CPU instead.")
-        self.vl_version = 2 if kwargs.get("model_type", "QWEN2-VL") == "QWEN2-VL" else 1
+        requested_model_type = normalize_model_type(
+            kwargs.get("model_type", "QWEN2-VL"))
+        self.vl_version = 2 if requested_model_type == "QWEN2-VL" else 1
         self.dtype = kwargs.get("dtype", torch.float16)
         mean = (0.48145466, 0.4578275, 0.40821073)
         std = (0.26862954, 0.26130258, 0.27577711)
@@ -376,7 +379,8 @@ class Preprocessor:
         # only cache for video type image list
         self.local_cache = LocalCache(max_cache_size=128)
         # audio
-        self.model_type = getenv("QWEN_MODEL_TYPE", "QWEN2-VL").upper()
+        self.model_type = normalize_model_type(
+            getenv("QWEN_MODEL_TYPE", requested_model_type))
         self.padding = "max_length" if self.model_type == "QWEN2-AL" else "longest"
 
     def get_vit_seq_len(self, resized_h, resized_w, temporal=2):

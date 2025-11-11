@@ -7,7 +7,11 @@ from ..vl_inference.utils.hie.vit_preprocess import get_image_preprocessor
 from ..vl_inference.utils.qwen_vl_status import VLStatusCode
 from ..vl_inference.utils.env import getenv
 from ..vl_inference.runtime.qwen_vl import QwenVl
-from ..vl_inference.utils.config import VitConfig, CacheConfig
+from ..vl_inference.utils.config import (
+    VitConfig,
+    CacheConfig,
+    normalize_model_type,
+)
 from dashinfer import allspark
 from ..vl_inference.runtime.qwen_vl import VLRequest
 from ..vl_inference.utils.env import setenv
@@ -45,8 +49,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security.http import HTTPAuthorizationCredentials, HTTPBearer
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
-
 from pydantic_settings import BaseSettings
 import shortuuid
 import tiktoken
@@ -102,13 +104,7 @@ def init():
     context.set("output_dir", output_dir)
     context.set("model_name", model_name)
     # -----------------------Init Engine--------------------------
-    config = Qwen2VLConfig.from_pretrained(
-        model_loader.hf_model_path,
-        trust_remote_code=True,
-        revision=None,
-        code_revision=None,
-    )
-    model_type = config.model_type.upper().replace("_", "-")
+    model_type = normalize_model_type(model_loader.vl_model_spec.runtime_name)
     tokenizer = model_loader.tokenizer
 
     context.set("eos_token_id", tokenizer.eos_token_id)

@@ -3,7 +3,7 @@
  @file    qwen_vl.py
 '''
 from .hie_worker import HieWorker
-from ..utils.config import QWEN_MODEL_TYPES
+from ..utils.config import QWEN_MODEL_TYPES, normalize_model_type
 from ..utils.config import SPECIAL_TOKENS_DICT
 from .hie_allspark_worker import HieAllsparkWorker
 from ..utils.hie_allspark.model_hie_allspark import (
@@ -237,7 +237,8 @@ class QwenVl:
         # init time list
         self.hie_vit_times = []
         self.cache_vit_times = []
-        self.hie_model_type = getenv("QWEN_MODEL_TYPE", "QWEN2-VL").upper()
+        self.hie_model_type = normalize_model_type(
+            getenv("QWEN_MODEL_TYPE", "QWEN2-VL"))
         if self.hie_model_type not in QWEN_MODEL_TYPES:
             raise ValueError(f"QWEN_MODEL_TYPE shoule be set one of {QWEN_MODEL_TYPES}")
         # init preprocess

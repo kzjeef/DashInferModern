@@ -75,6 +75,17 @@ QWEN_MODEL_TYPES = (
     "GUMMY-AL",
 )
 
+MODEL_TYPE_ALIASES = {
+    "QWEN2.5-VL": "QWEN2-VL",
+    "QWEN2-5-VL": "QWEN2-VL",
+}
+
+
+def normalize_model_type(model_type):
+    """Return the canonical runtime name for a supported model family."""
+    normalized = str(model_type).strip().upper().replace("_", "-")
+    return MODEL_TYPE_ALIASES.get(normalized, normalized)
+
 SPECIAL_TOKENS_DICT = {
     "IMAGE_BOS": 151857,
     "IMAGE_EOS": 151858,

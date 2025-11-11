@@ -6,7 +6,7 @@ from ..utils.hie_allspark import *
 from ..utils.hie import *
 from ..utils.qwen_vl_status import VLStatusCode
 from .vit import Vit, VitStatus
-from ..utils.config import VitConfig
+from ..utils.config import VitConfig, normalize_model_type
 
 import threading
 import queue
@@ -60,7 +60,8 @@ class HieWokerImpl(threading.Thread):
         self.profile = profile
         self.model_path = model_path
         self.exit_signal = exit_signal
-        self.model_type = getenv("QWEN_MODEL_TYPE", "QWEN2-VL").upper()
+        self.model_type = normalize_model_type(
+            getenv("QWEN_MODEL_TYPE", "QWEN2-VL"))
         self.backend = backend
         self.trt_vit_config = trt_vit_config
 
