@@ -19,6 +19,20 @@ SPEC = importlib.util.spec_from_file_location("vl_model_config", MODULE_PATH)
 VL_MODEL_CONFIG = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VL_MODEL_CONFIG)
 
+RUNTIME_CONFIG_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "multimodal"
+    / "dashinfer_vlm"
+    / "vl_inference"
+    / "utils"
+    / "config"
+    / "config.py"
+)
+RUNTIME_SPEC = importlib.util.spec_from_file_location(
+    "vl_runtime_config", RUNTIME_CONFIG_PATH)
+VL_RUNTIME_CONFIG = importlib.util.module_from_spec(RUNTIME_SPEC)
+RUNTIME_SPEC.loader.exec_module(VL_RUNTIME_CONFIG)
+
 
 class VLModelConfigTest(unittest.TestCase):
 
@@ -55,6 +69,23 @@ class VLModelConfigTest(unittest.TestCase):
     def test_requires_vision_config(self):
         with self.assertRaisesRegex(ValueError, "vision_config"):
             VL_MODEL_CONFIG.get_vision_config({})
+
+    def test_normalizes_qwen25_runtime_aliases(self):
+        aliases = ("QWEN2.5-VL", "qwen2_5_vl", "qwen2-5-vl")
+        for alias in aliases:
+            with self.subTest(alias=alias):
+                self.assertEqual(
+                    "QWEN2-VL",
+                    VL_RUNTIME_CONFIG.normalize_model_type(alias),
+                )
+
+    def test_keeps_existing_runtime_names(self):
+        for model_type in VL_RUNTIME_CONFIG.QWEN_MODEL_TYPES:
+            with self.subTest(model_type=model_type):
+                self.assertEqual(
+                    model_type,
+                    VL_RUNTIME_CONFIG.normalize_model_type(model_type),
+                )
 
 
 if __name__ == "__main__":
