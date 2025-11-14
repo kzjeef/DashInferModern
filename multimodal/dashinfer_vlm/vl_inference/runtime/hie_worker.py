@@ -7,6 +7,7 @@ from ..utils.hie import *
 from ..utils.qwen_vl_status import VLStatusCode
 from .vit import Vit, VitStatus
 from ..utils.config import VitConfig, normalize_model_type
+from ..utils.vision_grid import normalize_vision_grid
 
 import threading
 import queue
@@ -171,6 +172,14 @@ class HieWokerImpl(threading.Thread):
             request_id=task.request_id, vit_id=task.vit_id, status=VitStatus.VL_SUCCESS
         )
         dtype = torch.half if self.precision == "fp16" else torch.float
+        vision_grid = None
+        if self.model_type == "QWEN2-VL" and not isinstance(image, str):
+            try:
+                vision_grid = normalize_vision_grid(task.vit_grid_thw)
+            except ValueError as error:
+                logging.error("invalid vision grid: %s", error)
+                vit_res.status = VLStatusCode.VL_IMAGE_FORMAT_ERROR
+                return vit_res
         if isinstance(image, str):
             logging.error(
                 "image/audio do not support url input, image should be preprocess before sending to vit"
@@ -179,15 +188,6 @@ class HieWokerImpl(threading.Thread):
             vit_res.status = status
             return vit_res
         elif isinstance(image, torch.Tensor):
-            if self.model_type == "QWEN2-VL" and (
-                task.vit_grid_thw is None or len(task.vit_grid_thw) != 3
-            ):
-                logging.error(
-                    "images_infos should be set list[t,h,w] when using vit version 2"
-                )
-                status = VLStatusCode.VL_IMAGE_FORMAT_ERROR
-                vit_res.status = status
-                return vit_res
             if self.model_type == "QWEN2-AL" and (
                 task.audio_attn_mask is None
                 or not isinstance(task.audio_attn_mask, torch.Tensor)
@@ -205,28 +205,15 @@ class HieWokerImpl(threading.Thread):
                     task.audio_attn_mask = task.audio_attn_mask.unsqueeze(0)
                 audio_output_lengths = self.get_audio_seq_len(task.audio_attn_mask)
                 image_info = task.audio_attn_mask.to(dtype=dtype, device=self.device)
-            if task.vit_grid_thw and len(task.vit_grid_thw) == 3:
+            if vision_grid is not None:
                 image_info = {
-                    "vit_grid_t": task.vit_grid_thw[0],
-                    "vit_grid_h": task.vit_grid_thw[1],
-                    "vit_grid_w": task.vit_grid_thw[2],
+                    "vit_grid_t": vision_grid[0],
+                    "vit_grid_h": vision_grid[1],
+                    "vit_grid_w": vision_grid[2],
                 }
-                vit_res.vit_grid_thw = [
-                    image_info["vit_grid_t"],
-                    image_info["vit_grid_h"],
-                    image_info["vit_grid_w"],
-                ]
+                vit_res.vit_grid_thw = list(vision_grid)
             image = image.to(dtype=dtype, device=self.device)
         elif isinstance(image, np.ndarray):
-            if self.model_type == "QWEN2-VL" and (
-                task.vit_grid_thw is None or len(task.vit_grid_thw) != 3
-            ):
-                logging.error(
-                    "images_infos should be set list[t,h,w] when using vit version 2"
-                )
-                status = VLStatusCode.VL_IMAGE_FORMAT_ERROR
-                vit_res.status = status
-                return vit_res
             if self.model_type == "QWEN2-AL" and (
                 task.audio_attn_mask is None
                 or not isinstance(task.audio_attn_mask, np.ndarray)
@@ -244,17 +231,13 @@ class HieWokerImpl(threading.Thread):
                     task.audio_attn_mask = np.expand_dims(task.audio_attn_mask, axis=0)
                 audio_output_lengths = self.get_audio_seq_len(task.audio_attn_mask)
                 image_info = task.audio_attn_mask.to(dtype=dtype, device=self.device)
-            if task.vit_grid_thw and len(task.vit_grid_thw) == 3:
+            if vision_grid is not None:
                 image_info = {
-                    "vit_grid_t": task.vit_grid_thw[0],
-                    "vit_grid_h": task.vit_grid_thw[1],
-                    "vit_grid_w": task.vit_grid_thw[2],
+                    "vit_grid_t": vision_grid[0],
+                    "vit_grid_h": vision_grid[1],
+                    "vit_grid_w": vision_grid[2],
                 }
-                vit_res.vit_grid_thw = [
-                    image_info["vit_grid_t"],
-                    image_info["vit_grid_h"],
-                    image_info["vit_grid_w"],
-                ]
+                vit_res.vit_grid_thw = list(vision_grid)
             image = torch.from_numpy(image).to(dtype=dtype, device=self.device)
         else:
             logging.error(
