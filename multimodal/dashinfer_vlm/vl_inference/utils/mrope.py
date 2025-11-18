@@ -58,6 +58,8 @@ def build_mrope_positions(
         position_cursor += max(time, merged_height, merged_width)
         token_cursor = image_end
 
+    if image_token_id in tokens[token_cursor:]:
+        raise ValueError("input contains an image token without a vision grid")
     _append_text_positions(
         positions, position_cursor, len(tokens) - token_cursor)
     if any(len(axis) != len(tokens) for axis in positions):
