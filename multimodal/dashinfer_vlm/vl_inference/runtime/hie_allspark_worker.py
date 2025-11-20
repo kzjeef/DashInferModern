@@ -10,6 +10,7 @@ from ..utils.hie_allspark.model_hie_allspark import (
 )
 from dashinfer import allspark
 import torch
+from ..utils.mrope import build_mrope_positions
 
 
 class HieAllsparkWorker:
@@ -34,73 +35,33 @@ class HieAllsparkWorker:
         vit_grid_thw_list,
         image_modality_token_id,
     ):
-        spatial_merge_size = 2
-        assert len(total_input_ids) == len(vit_grid_thw_list)
-        total_llm_positions = []
+        if len(total_input_ids) != len(vit_grid_thw_list):
+            raise ValueError("token batches and vision grid batches must match")
 
-        for input_tokens, grid_thw in zip(total_input_ids, vit_grid_thw_list):
-            if len(grid_thw) > 0 and grid_thw[0] is None:
+        position_batches = []
+        for input_tokens, vision_grids in zip(
+            total_input_ids, vit_grid_thw_list
+        ):
+            if vision_grids and vision_grids[0] is None:
                 return []
-            llm_pos_ids_list: list = []
-            st = 0
-            for t, h, w in grid_thw:
-                ed = input_tokens.index(image_modality_token_id, st)
-                llm_grid_t, llm_grid_h, llm_grid_w = (
-                    t,
-                    h // spatial_merge_size,
-                    w // spatial_merge_size,
+            position_batches.append(
+                build_mrope_positions(
+                    input_tokens,
+                    vision_grids,
+                    image_modality_token_id,
                 )
-                text_len = ed - st
-
-                st_idx = (
-                    llm_pos_ids_list[-1].max().item() + 1
-                    if len(llm_pos_ids_list) > 0
-                    else 0
-                )
-                llm_pos_ids_list.append(torch.arange(text_len).repeat(3, 1) + st_idx)
-
-                _llm_tpos_ids = (
-                    torch.arange(llm_grid_t)
-                    .unsqueeze(1)
-                    .repeat(1, llm_grid_h * llm_grid_w)
-                    .flatten()
-                )
-                _llm_hpos_ids = (
-                    torch.arange(llm_grid_h)
-                    .unsqueeze(1)
-                    .repeat(1, llm_grid_w)
-                    .flatten()
-                    .repeat(llm_grid_t)
-                )
-                _llm_wpos_ids = (
-                    torch.arange(llm_grid_w)
-                    .unsqueeze(0)
-                    .repeat(llm_grid_h, 1)
-                    .flatten()
-                    .repeat(llm_grid_t)
-                )
-                _llm_pos_ids = torch.stack(
-                    [_llm_tpos_ids, _llm_hpos_ids, _llm_wpos_ids]
-                )
-                llm_pos_ids_list.append(_llm_pos_ids + text_len + st_idx)
-                st = ed + _llm_pos_ids.shape[-1]
-
-            if st < len(input_tokens):
-                st_idx = (
-                    llm_pos_ids_list[-1].max().item() + 1
-                    if len(llm_pos_ids_list) > 0
-                    else 0
-                )
-                text_len = len(input_tokens) - st
-                llm_pos_ids_list.append(torch.arange(text_len).repeat(3, 1) + st_idx)
-
-            llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(
-                3, len(input_tokens)
             )
-            total_llm_positions.append(llm_positions)
 
-        total_llm_positions = torch.stack(total_llm_positions, dim=1)
-        return total_llm_positions
+        sequence_lengths = {
+            len(positions[0]) for positions in position_batches
+        }
+        if len(sequence_lengths) > 1:
+            raise ValueError("M-RoPE batches must have equal sequence lengths")
+        if not position_batches:
+            return []
+        return torch.tensor(position_batches, dtype=torch.int64).permute(
+            1, 0, 2
+        ).contiguous()
 
     def get_gen_cfg(self, request: AllSparkRequest, position_list: list):
         dl_list = []
