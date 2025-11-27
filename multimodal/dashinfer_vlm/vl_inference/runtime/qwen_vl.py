@@ -19,6 +19,7 @@ from ..utils.vl_logger import (
 from ..utils.config import VitConfig, CacheConfig
 from ..utils.env import getenv
 from ..utils.hie.vit_preprocess import Preprocessor
+from ..utils.multimodal_tokens import prepare_multimodal_tokens
 from ..utils.qwen_vl_truncate import qwen_vl_truncate
 from ..utils import error as error
 from .vit import Vit, VitGroup
@@ -325,81 +326,42 @@ class QwenVl:
             pass
         else:
             raise ValueError("input_tokens should be list[list[int]]")
-        input_tokens = copy.deepcopy(vl_request.input_tokens[0])
-        # covert to numpy
-        if isinstance(vl_request.input_tokens[0], torch.Tensor):
-            input_tokens = vl_request.input_tokens[0].numpy()
-        elif isinstance(vl_request.input_tokens[0], list):
-            input_tokens = np.array(vl_request.input_tokens[0])
-        elif isinstance(vl_request.input_tokens[0], np.ndarray):
-            pass
+        source_tokens = vl_request.input_tokens[0]
+        if isinstance(source_tokens, torch.Tensor):
+            input_tokens = source_tokens.detach().cpu().reshape(-1).tolist()
+        elif isinstance(source_tokens, list):
+            input_tokens = copy.deepcopy(source_tokens)
+        elif isinstance(source_tokens, np.ndarray):
+            input_tokens = source_tokens.reshape(-1).tolist()
         else:
             raise ValueError(
-                "Unsupported input type: {}".format(type(vl_request.input_tokens[0]))
+                "Unsupported input type: {}".format(type(source_tokens))
             )
-        as_request.old_context_len = input_tokens.shape[0]
+        as_request.old_context_len = len(input_tokens)
         if self.hie_model_type == "QWEN2-VL":
-            input_tokens[input_tokens == replace_bos_id] = token_bos
-            input_tokens[input_tokens == replace_eos_id] = token_eos
-        if not np.isin(target_id, input_tokens):
-            count = np.sum(
-                (input_tokens[:-1] == token_bos) & (input_tokens[1:] == token_eos)
-            )
-            positions = np.where(
-                (input_tokens[:-1] == token_bos) & (input_tokens[1:] == token_eos)
-            )[0]
-            if count != len(hie_results):
-                raise AssertionError(
-                    f"vit result nums:{len(hie_results)} should be equal to request count: {count}"
+            input_tokens = [
+                (
+                    token_bos
+                    if token == replace_bos_id
+                    else token_eos if token == replace_eos_id else token
                 )
-            shift = 0  # 插入的位移
-            for i, pos in enumerate(positions):
-                vit_len = hie_results[
-                    i
-                ].get_vit_len()  # 假设这里的 pos 是依据 hie_results 索引
-                input_tokens = np.insert(
-                    input_tokens, pos + 1 + shift, [target_id] * vit_len
-                )
-                as_request.vit_embs.append(
-                    hie_results[i].get_embs()
-                )  # 将 emb 插入 as_request 的 vit_embs
-                shift += vit_len  # 更新位移
-        else:
-            # 找出连续的151859出现的次数
-            def count_continuous_occurrences(input_array, target):
-                counts = []
-                current_count = 0
-
-                for num in input_array:
-                    if num == target:
-                        current_count += 1
-                    else:
-                        if current_count > 0:
-                            counts.append(current_count)
-                            current_count = 0
-
-                # Check if the last series of 151859 was counted
-                if current_count > 0:
-                    counts.append(current_count)
-
-                return counts
-
-            target_list = count_continuous_occurrences(input_tokens, target_id)
-            if len(target_list) != len(hie_results):
-                raise AssertionError(
-                    f"vit result nums:{len(hie_results)} should be equal to request count: {len(target_list)}"
-                )
-            for i in range(len(hie_results)):
-                if hie_results[i].get_vit_len() != target_list[i]:
-                    raise AssertionError(
-                        f"vit embedding len:{hie_results[i].get_vit_len()} should be equal to input target length: {target_list[i]}"
-                    )
-                as_request.vit_embs.append(hie_results[i].get_embs())
+                for token in input_tokens
+            ]
+        input_tokens = prepare_multimodal_tokens(
+            input_tokens,
+            [result.get_vit_len() for result in hie_results],
+            token_bos,
+            token_eos,
+            target_id,
+        )
+        as_request.vit_embs = [result.get_embs() for result in hie_results]
         if self.hie_model_type == "GUMMY-AL":
             # remove token_bos/token_eos, GUMMY-AL need to remove token_bos/token_eos
             values_to_remove = [token_bos, token_eos]
-            input_tokens = input_tokens[~np.isin(input_tokens, values_to_remove)]
-        inputs = input_tokens.reshape(1, -1)
+            input_tokens = [
+                token for token in input_tokens if token not in values_to_remove
+            ]
+        inputs = np.asarray(input_tokens, dtype=np.int64).reshape(1, -1)
         vl_request.as_context_len = inputs.shape[1]
         attention_mask = np.ones(inputs.shape, dtype=np.int64)
         as_request.torch_input = {
@@ -423,7 +385,7 @@ class QwenVl:
         #     torch.save(byte_tensor, f'tensor_input_key_{i}.pt')
 
         # for qwen-vl2 get position
-        as_request.input_lists = [input_tokens.tolist()]
+        as_request.input_lists = [list(input_tokens)]
         # qwen-vl2 get position
         as_request.vit_positions = [
             [result.get_vit_grid_thw() for result in hie_results]
