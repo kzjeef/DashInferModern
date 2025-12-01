@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "macos-arm",
+      "displayName": "macOS Apple Silicon",
+      "description": "CPU-only Qwen build using Apple Accelerate and GGML",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/macos-arm",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CONFIG_ACCELERATOR_TYPE": "NONE",
+        "CONFIG_HOST_CPU_TYPE": "ARM",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_SPAN_ATTENTION": "OFF",
+        "ENABLE_AVX2": "OFF",
+        "ENABLE_AVX512": "OFF",
+        "ENABLE_ARMCL": "OFF",
+        "ENABLE_ARM_V84_V9": "OFF",
+        "ENABLE_BF16": "ON",
+        "ENABLE_FP16": "ON",
+        "ENABLE_FP8": "OFF",
+        "ENABLE_NVFP4": "OFF",
+        "ENABLE_JSON_MODE": "OFF",
+        "ALLSPARK_CBLAS": "ACCELERATE",
+        "RUNTIME_THREAD": "OMP",
+        "ALWAYS_READ_LOAD_MODEL": "ON",
+        "BUILD_HIEDNN": "OFF",
+        "BUILD_PYTHON": "ON",
+        "BUILD_UTEST": "OFF",
+        "BUILD_PACKAGE": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-arm",
+      "configurePreset": "macos-arm"
+    }
+  ]
+}
