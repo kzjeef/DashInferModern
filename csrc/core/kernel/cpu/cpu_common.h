@@ -7,6 +7,11 @@
 #include <iostream>
 #ifdef ALLSPARK_USE_MKL_
 #include <mkl.h>
+#elif defined(ALLSPARK_USE_ACCELERATE_)
+#ifndef ACCELERATE_NEW_LAPACK
+#define ACCELERATE_NEW_LAPACK
+#endif
+#include <Accelerate/Accelerate.h>
 #elif defined(ALLSPARK_USE_CBLAS_)
 #include <cblas.h>
 #endif

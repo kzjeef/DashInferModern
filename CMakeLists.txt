@@ -32,7 +32,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 message(STATUS "CMAKE_BUILD_TYPE:${CMAKE_BUILD_TYPE}")
 
 set(ALLSPARK_CBLAS "MKL"
-    CACHE STRING "Blas library choice, MKL/BLIS/NONE")
+    CACHE STRING "Blas library choice, MKL/BLIS/ACCELERATE/NONE")
 
 set(RUNTIME_THREAD "OMP" CACHE STRING "cpu threading runtime") # VALUE : OMP/TBB
 #option
