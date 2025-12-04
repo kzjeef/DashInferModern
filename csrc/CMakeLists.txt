@@ -124,11 +124,14 @@ list(APPEND ALLSPARK_SRCS ${PROTO_SRCS})
 add_library(allspark_objects OBJECT ${ALLSPARK_SRCS})
 set_target_properties(allspark_objects PROPERTIES CXX_STANDARD ${CXX_STD})  # c17 for cutlass.
 set_target_properties(allspark_objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT APPLE)
+    set(ALLSPARK_STDCXXFS_LIB stdc++fs)
+endif()
 target_link_libraries(allspark_objects
     PRIVATE
         ${ONEDNN_LIBRARY}
         git_version
-        stdc++fs
+        ${ALLSPARK_STDCXXFS_LIB}
         allspark_kernel
         CONAN_PKG::glog
         CONAN_PKG::protobuf

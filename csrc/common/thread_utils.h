@@ -16,8 +16,12 @@
 static inline void setThreadName(int id, const std::string& baseName) {
   std::ostringstream threadName;
   threadName << baseName << ":" << id;
+#if defined(__APPLE__)
+  pthread_setname_np(threadName.str().c_str());
+#else
   auto handle = pthread_self();
   pthread_setname_np(handle, threadName.str().c_str());
+#endif
 }
 #elif defined(_WIN32)
 

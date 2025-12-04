@@ -28,7 +28,16 @@ target_include_directories(_allspark
   PRIVATE
     ${CUDAToolkit_INCLUDE_DIR}
     ${CMAKE_BINARY_DIR}/csrc)
-target_link_options(_allspark PRIVATE -Wl,--whole-archive $<TARGET_FILE:allspark_framework_static> -Wl,--no-whole-archive -rdynamic)
+if(APPLE)
+    target_link_options(
+      _allspark PRIVATE
+      -Wl,-force_load,$<TARGET_FILE:allspark_framework_static>)
+else()
+    target_link_options(
+      _allspark PRIVATE
+      -Wl,--whole-archive $<TARGET_FILE:allspark_framework_static>
+      -Wl,--no-whole-archive -rdynamic)
+endif()
 target_link_libraries(_allspark PRIVATE
    allspark_framework_static
    CONAN_PKG::protobuf

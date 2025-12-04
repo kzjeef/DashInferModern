@@ -5,8 +5,6 @@
 
 #pragma once
 
-#include <hash_fun.h>
-
 #include <cmath>
 #include <functional>
 #include <map>
