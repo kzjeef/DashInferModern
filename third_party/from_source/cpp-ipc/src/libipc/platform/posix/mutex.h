@@ -8,6 +8,11 @@
 #include <atomic>
 
 #include <pthread.h>
+#if defined(__APPLE__)
+#include <errno.h>
+#include <time.h>
+#include <unistd.h>
+#endif
 
 #include "libipc/platform/detail.h"
 #include "libipc/utility/log.h"
@@ -131,10 +136,12 @@ public:
             ipc::error("fail pthread_mutexattr_setpshared[%d]\n", eno);
             return false;
         }
+#if !defined(__APPLE__)
         if ((eno = ::pthread_mutexattr_setrobust(&mutex_attr, PTHREAD_MUTEX_ROBUST)) != 0) {
             ipc::error("fail pthread_mutexattr_setrobust[%d]\n", eno);
             return false;
         }
+#endif
         *mutex_ = PTHREAD_MUTEX_INITIALIZER;
         if ((eno = ::pthread_mutex_init(mutex_, &mutex_attr)) != 0) {
             ipc::error("fail pthread_mutex_init[%d]\n", eno);
@@ -165,18 +172,43 @@ public:
         mutex_ = nullptr;
     }
 
+#if defined(__APPLE__)
+    static int timedlock_emulated(pthread_mutex_t *mutex,
+                                  timespec const &deadline) noexcept {
+        for (;;) {
+            int eno = ::pthread_mutex_trylock(mutex);
+            if (eno != EBUSY) return eno;
+            timespec now;
+            ::clock_gettime(CLOCK_REALTIME, &now);
+            if (now.tv_sec > deadline.tv_sec ||
+                (now.tv_sec == deadline.tv_sec &&
+                 now.tv_nsec >= deadline.tv_nsec)) {
+                return ETIMEDOUT;
+            }
+            ::usleep(1000);
+        }
+    }
+#endif
+
     bool lock(std::uint64_t tm) noexcept {
         if (!valid()) return false;
         for (;;) {
             auto ts = detail::make_timespec(tm);
-            int eno = (tm == invalid_value) 
-                ? ::pthread_mutex_lock(mutex_) 
+#if defined(__APPLE__)
+            int eno = (tm == invalid_value)
+                ? ::pthread_mutex_lock(mutex_)
+                : timedlock_emulated(mutex_, ts);
+#else
+            int eno = (tm == invalid_value)
+                ? ::pthread_mutex_lock(mutex_)
                 : ::pthread_mutex_timedlock(mutex_, &ts);
+#endif
             switch (eno) {
             case 0:
                 return true;
             case ETIMEDOUT:
                 return false;
+#if !defined(__APPLE__)
             case EOWNERDEAD: {
                     if (shm_->ref() > 1) {
                         shm_->sub_ref();
@@ -193,6 +225,7 @@ public:
                     }
                 }
                 break; // loop again
+#endif
             default:
                 ipc::error("fail pthread_mutex_lock[%d]\n", eno);
                 return false;
@@ -202,13 +235,19 @@ public:
 
     bool try_lock() noexcept(false) {
         if (!valid()) return false;
+#if defined(__APPLE__)
+        int eno = ::pthread_mutex_trylock(mutex_);
+        if (eno == EBUSY) eno = ETIMEDOUT;
+#else
         auto ts = detail::make_timespec(0);
         int eno = ::pthread_mutex_timedlock(mutex_, &ts);
+#endif
         switch (eno) {
         case 0:
             return true;
         case ETIMEDOUT:
             return false;
+#if !defined(__APPLE__)
         case EOWNERDEAD: {
                 if (shm_->ref() > 1) {
                     shm_->sub_ref();
@@ -225,6 +264,7 @@ public:
                 }
             }
             break;
+#endif
         default:
             ipc::error("fail pthread_mutex_timedlock[%d]\n", eno);
             break;

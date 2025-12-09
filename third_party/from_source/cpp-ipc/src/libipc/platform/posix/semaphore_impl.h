@@ -6,6 +6,10 @@
 #include <sys/stat.h>   /* For mode constants */
 #include <semaphore.h>
 #include <errno.h>
+#if defined(__APPLE__)
+#include <time.h>
+#include <unistd.h>
+#endif
 
 #include "libipc/utility/log.h"
 #include "libipc/shm.h"
@@ -71,6 +75,22 @@ public:
             }
         } else {
             auto ts = detail::make_timespec(tm);
+#if defined(__APPLE__)
+            for (;;) {
+                if (::sem_trywait(h_) == 0) break;
+                if (errno != EAGAIN) {
+                    ipc::error("fail sem_trywait[%d]: tm = %zd\n", errno, tm);
+                    return false;
+                }
+                timespec now;
+                ::clock_gettime(CLOCK_REALTIME, &now);
+                if (now.tv_sec > ts.tv_sec ||
+                    (now.tv_sec == ts.tv_sec && now.tv_nsec >= ts.tv_nsec)) {
+                    return false;
+                }
+                ::usleep(1000);
+            }
+#else
             if (::sem_timedwait(h_, &ts) != 0) {
                 if (errno != ETIMEDOUT) {
                     ipc::error("fail sem_timedwait[%d]: tm = %zd, tv_sec = %ld, tv_nsec = %ld\n",
@@ -78,6 +98,7 @@ public:
                 }
                 return false;
             }
+#endif
         }
         return true;
     }
