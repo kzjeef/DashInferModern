@@ -2,7 +2,7 @@ set -x
 
 clean="OFF"
 
-# with_platform, to support cuda/x86/arm build
+# with_platform, to support cuda/x86/arm/macos build
 with_platform="${AS_PLATFORM:-cuda}"
 # cuda related version, provide a defualt value for cuda 11.4
 cuda_version="${AS_CUDA_VERSION:-12.4}"
@@ -56,13 +56,18 @@ if [ ! -d "./${build_folder}"  ]; then
       conanfile=../conan/conanfile_openmpi.txt
     fi
 
-    if [ "${with_platform,,}" == "armclang" ]; then
+    if [ "${with_platform}" == "armclang" ]; then
       conanfile=../conan/conanfile_arm.txt
       if [ "${enable_multinuma}" == "ON" ]; then
         conanfile=../conan/conanfile_openmpi_arm.txt
       fi
       cp -f ../conan/conanprofile_armclang.aarch64 ~/.conan/profiles/dashinfer_compiler_profile
       cp -r ../conan/settings_arm.yml ~/.conan/settings.yml
+    fi
+
+    if [ "${with_platform}" == "macos" ]; then
+      cp -f ../conan/conanprofile.macos_arm64 \
+        ~/.conan/profiles/dashinfer_compiler_profile
     fi
 
     if [ "$enable_glibcxx11_abi" == "ON" ]; then
@@ -79,7 +84,7 @@ cd ${build_folder}
 source ./activate.sh
 export PATH=`pwd`/bin:$PATH
 
-if [ "${with_platform,,}" == "cuda" ]; then
+if [ "${with_platform}" == "cuda" ]; then
   cmake .. \
       -DCMAKE_BUILD_TYPE=${build_type} \
       -DBUILD_PACKAGE=${build_package} \
@@ -97,7 +102,7 @@ if [ "${with_platform,,}" == "cuda" ]; then
       -DENABLE_SPAN_ATTENTION=${enable_span_attn} \
       -DBUILD_HIEDNN=${build_hiednn} \
       -DENABLE_MULTINUMA=OFF
-elif [ "${with_platform,,}" == "x86" ]; then
+elif [ "${with_platform}" == "x86" ]; then
   cmake .. \
       -DCMAKE_BUILD_TYPE=${build_type} \
       -DBUILD_PACKAGE=${build_package} \
@@ -110,7 +115,7 @@ elif [ "${with_platform,,}" == "x86" ]; then
       -DENABLE_SPAN_ATTENTION=OFF \
       -DALWAYS_READ_LOAD_MODEL=ON \
       -DENABLE_MULTINUMA=${enable_multinuma}
-elif [ "${with_platform,,}" == "armclang" ]; then
+elif [ "${with_platform}" == "armclang" ]; then
   cmake .. \
       -DCMAKE_BUILD_TYPE=${build_type} \
       -DBUILD_PACKAGE=${build_package} \
@@ -133,18 +138,44 @@ elif [ "${with_platform,,}" == "armclang" ]; then
       -DENABLE_SPAN_ATTENTION=OFF \
       -DALWAYS_READ_LOAD_MODEL=ON \
       -DENABLE_MULTINUMA=${enable_multinuma}
+elif [ "${with_platform}" == "macos" ]; then
+  if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
+    echo "AS_PLATFORM=macos requires Apple Silicon macOS" >&2
+    exit 2
+  fi
+  homebrew_prefix="$(brew --prefix)"
+  cmake .. \
+      -G Ninja \
+      -DCMAKE_BUILD_TYPE=${build_type} \
+      -DCMAKE_OSX_ARCHITECTURES=arm64 \
+      -DCMAKE_PREFIX_PATH="${homebrew_prefix}/opt/libomp" \
+      -DBUILD_PACKAGE=OFF \
+      -DCONFIG_ACCELERATOR_TYPE=NONE \
+      -DCONFIG_HOST_CPU_TYPE=ARM \
+      -DBUILD_PYTHON=ON \
+      -DBUILD_HIEDNN=OFF \
+      -DALLSPARK_CBLAS=ACCELERATE \
+      -DENABLE_CUDA=OFF \
+      -DENABLE_SPAN_ATTENTION=OFF \
+      -DENABLE_AVX2=OFF \
+      -DENABLE_AVX512=OFF \
+      -DENABLE_ARMCL=OFF \
+      -DENABLE_ARM_V84_V9=OFF \
+      -DENABLE_FP8=OFF \
+      -DENABLE_NVFP4=OFF \
+      -DENABLE_JSON_MODE=OFF \
+      -DALWAYS_READ_LOAD_MODEL=ON \
+      -DENABLE_MULTINUMA=OFF
 fi
 
-# do the make and package.
-# VERBOSE=1 make && make install
-make -j16 && make install
+# Build through CMake so both Makefiles and Ninja presets work.
+cmake --build . --parallel 16 && cmake --install .
 
 
 if [ $? -eq 0 ]; then
   if [ ${build_package} == "ON" ]; then
-  make package
+  cmake --build . --target package
   fi
 else
   exit $?
 fi
-
