@@ -163,6 +163,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DENABLE_ARM_V84_V9=OFF \
       -DENABLE_FP8=OFF \
       -DENABLE_NVFP4=OFF \
+      -DENABLE_GGML=ON \
       -DENABLE_JSON_MODE=OFF \
       -DALWAYS_READ_LOAD_MODEL=ON \
       -DENABLE_MULTINUMA=OFF

@@ -75,6 +75,7 @@ option(MEM_CHECK "check memory" OFF)
 option(LOCK_CHECK "check deadlock" OFF)
 option(ALWAYS_READ_LOAD_MODEL "load and parse model via every read" OFF)
 option(ENABLE_GLIBCXX11_ABI "build with cxx11 abi" OFF)
+option(ENABLE_GGML "enable GGML Q8_0 CPU kernels" OFF)
 
 # Enable JSON Mode by using LMFE lib
 option(ENABLE_JSON_MODE "enable json mode support" ON)
@@ -153,6 +154,14 @@ endif()
 include(AutoCCache)
 include(dnnl)
 include(cblas)
+
+if (ENABLE_GGML)
+    if (ENABLE_CUDA)
+        message(FATAL_ERROR "ENABLE_GGML is supported by CPU-only builds")
+    endif()
+    list(APPEND ALLSPARK_DEFINITION "-DENABLE_GGML_GEMM")
+    include(ggml)
+endif()
 
 if (ENABLE_JSON_MODE)
     list(APPEND ALLSPARK_DEFINITION "-DENABLE_JSON_MODE")
