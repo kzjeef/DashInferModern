@@ -11,6 +11,7 @@ from .quantization_utils import *
 class Qwen_v15(Model):
 
     def __init__(self, torch_model, data_type, derive_type, **kwargs):
+        self.use_ggml_q8_0 = bool(kwargs.pop("use_ggml_q8_0", False))
         super().__init__("Qwen_v15", data_type, **kwargs)
         self.model.inputs.append(
             make_tensor("input_ids", np.empty(shape=(0, 0), dtype=np.int64)))
@@ -29,6 +30,12 @@ class Qwen_v15(Model):
             self._trans_weight(torch_model)
         self._trans_lora_weight(self._trans_weight)
         print("parse weight time: ", time.time() - start_time)
+
+    def make_gemm_op(self, gemm_name, inputs, op_attr={}):
+        if self.use_ggml_q8_0:
+            op_attr = dict(op_attr)
+            op_attr["use_ggml_q8_0"] = True
+        return super().make_gemm_op(gemm_name, inputs, op_attr)
 
     def _build_graph(self, torch_cfg, derive_type):
         cfg = self.model.model_conf

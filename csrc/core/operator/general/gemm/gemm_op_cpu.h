@@ -6,6 +6,10 @@
 #pragma once
 #include <core/operator/operator.h>
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 #include "gemm_op.h"
 
 namespace allspark {
@@ -30,5 +34,11 @@ class GemmOpCPU : public GemmOpBase {
  protected:
   DataType weight_data_type_ = DataType::FLOAT32;
   int reshape_cnt = 0;
+#ifdef ENABLE_GGML_GEMM
+  bool use_ggml_q8_0_ = false;
+  std::shared_ptr<std::vector<uint8_t>> ggml_weight_;
+  std::vector<uint8_t> ggml_work_buffer_;
+  int ggml_n_threads_ = 1;
+#endif
 };
 }  // namespace allspark

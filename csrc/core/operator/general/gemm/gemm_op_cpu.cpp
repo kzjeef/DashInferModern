@@ -6,12 +6,31 @@
 #include "gemm_op_cpu.h"
 
 #include <core/kernel/kernel.h>
+#include <cpu/cpu_common.h>
 #include <cpu/cpu_context.h>
 #include <utility/datatype_dispatcher.h>
+
+#include <algorithm>
+#include <cmath>
+#include <mutex>
+#include <unordered_map>
+
+#ifdef ENABLE_GGML_GEMM
+#include <ggml-cpu.h>
+#include <ggml.h>
+#endif
 
 using dnnl::memory;
 using tag = memory::format_tag;
 namespace allspark {
+
+#ifdef ENABLE_GGML_GEMM
+namespace {
+std::mutex ggml_q8_cache_mutex;
+std::unordered_map<const AsTensor*, std::shared_ptr<std::vector<uint8_t>>>
+    ggml_q8_cache;
+}  // namespace
+#endif
 
 inline bool UseOneDnn(int batch, float alpha) {
   return batch == 1 && alpha == 1.0f;
@@ -30,6 +49,75 @@ AsStatus GemmOpCPU::InitV2(const OperatorProto& op_proto,
                            TensorMap& weights_buffer, TensorMap* tensor_map) {
   AS_CHECK_STATUS(GemmOpBase::InitV2(op_proto, ctx, weights_map, weights_buffer,
                                      tensor_map));
+
+#ifdef ENABLE_GGML_GEMM
+  const auto& attr_map = op_proto.attr();
+  const auto q8_attr = attr_map.find("use_ggml_q8_0");
+  use_ggml_q8_0_ =
+      q8_attr != attr_map.end() && *reinterpret_cast<const bool*>(
+                                       q8_attr->second.data());
+  if (use_ggml_q8_0_) {
+    if (weights_[0]->GetDataType() != DataType::FLOAT32 || batch_ != 1 ||
+        k_ % ggml_blck_size(GGML_TYPE_Q8_0) != 0) {
+      LOG(ERROR) << "GGML Q8_0 requires a dense FP32 weight with K divisible "
+                    "by "
+                 << ggml_blck_size(GGML_TYPE_Q8_0) << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    if (activation_ != UNARYTYPE_UNDEFINED && activation_ != UnaryType::SILU) {
+      LOG(ERROR) << "GGML Q8_0 only supports the Qwen SiLU GEMM epilogue"
+                 << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    if (binary_type_ != BINARYTYPE_UNDEFINED && binary_type_ != BinaryType::ADD) {
+      LOG(ERROR) << "GGML Q8_0 only supports the Qwen residual-add epilogue"
+                 << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(ggml_q8_cache_mutex);
+      const auto cached = ggml_q8_cache.find(weights_[0]);
+      if (cached != ggml_q8_cache.end()) {
+        ggml_weight_ = cached->second;
+      }
+    }
+    if (!ggml_weight_) {
+      const float* source =
+          static_cast<const float*>(weights_[0]->GetDataPtr());
+      std::vector<float> transposed;
+      if (!transB_) {
+        transposed.resize(static_cast<size_t>(n_) * k_);
+        cpu::parallel_for(n_, [&](int64_t column) {
+          for (int64_t row = 0; row < k_; ++row) {
+            transposed[static_cast<size_t>(column) * k_ + row] =
+                source[static_cast<size_t>(row) * ldb_ + column];
+          }
+        });
+        source = transposed.data();
+      }
+
+      const size_t row_bytes = ggml_row_size(GGML_TYPE_Q8_0, k_);
+      auto quantized = std::make_shared<std::vector<uint8_t>>(row_bytes * n_);
+      const size_t written = ggml_quantize_chunk(
+          GGML_TYPE_Q8_0, source, quantized->data(), 0, n_, k_, nullptr);
+      if (written != quantized->size()) {
+        LOG(ERROR) << "GGML Q8_0 weight packing produced " << written
+                   << " bytes, expected " << quantized->size() << std::endl;
+        return AsStatus::ALLSPARK_RUNTIME_ERROR;
+      }
+      {
+        std::lock_guard<std::mutex> lock(ggml_q8_cache_mutex);
+        auto inserted = ggml_q8_cache.emplace(weights_[0], quantized);
+        ggml_weight_ = inserted.first->second;
+      }
+    }
+
+    const CPUContext* cpu_ctx = static_cast<const CPUContext*>(ctx_);
+    ggml_n_threads_ = std::max(1, std::min(12, cpu_ctx->GetNumThread()));
+    return AsStatus::ALLSPARK_SUCCESS;
+  }
+#endif
 
   auto eng = DNNLEngine::GetInstance().GetEngine();
   dnnl_op_ctx_ = std::make_unique<DNNLOpContext>();
@@ -74,6 +162,16 @@ AsStatus GemmOpCPU::InitV2(const OperatorProto& op_proto,
 AsStatus GemmOpCPU::Reshape() {
   int yn = n_;
   AS_CHECK_STATUS(GemmOpBase::Reshape(yn));
+
+#ifdef ENABLE_GGML_GEMM
+  if (use_ggml_q8_0_) {
+    if (dtype_ != DataType::FLOAT32) {
+      LOG(ERROR) << "GGML Q8_0 requires FP32 Qwen activations" << std::endl;
+      return AsStatus::ALLSPARK_PARAM_ERROR;
+    }
+    return AsStatus::ALLSPARK_SUCCESS;
+  }
+#endif
 
   const CPUContext* cpu_ctx = static_cast<const CPUContext*>(ctx_);
   auto eng = DNNLEngine::GetInstance().GetEngine();
@@ -176,6 +274,76 @@ AsStatus GemmOpCPU::Forward() {
   if (is_split_k_) {
     in = (char*)in + k_ * rank_id_ * SizeofType(dtype_);
   }
+
+#ifdef ENABLE_GGML_GEMM
+  if (use_ggml_q8_0_) {
+    const size_t context_size =
+        ggml_tensor_overhead() * 4 + ggml_graph_overhead();
+    struct ggml_init_params params = {context_size, nullptr, true};
+    struct ggml_context* ggml_context = ggml_init(params);
+    if (ggml_context == nullptr) {
+      return AsStatus::ALLSPARK_MEMORY_ERROR;
+    }
+
+    struct ggml_tensor* weight = ggml_new_tensor_2d(
+        ggml_context, GGML_TYPE_Q8_0, k_, n_);
+    weight->data = ggml_weight_->data();
+    struct ggml_tensor* input =
+        ggml_new_tensor_2d(ggml_context, GGML_TYPE_F32, k_, m_);
+    input->data = in;
+    input->nb[1] = static_cast<size_t>(lda_) * sizeof(float);
+    input->nb[2] = input->nb[1] * m_;
+    input->nb[3] = input->nb[2];
+    struct ggml_tensor* output = ggml_mul_mat(ggml_context, weight, input);
+    output->data = out;
+
+    struct ggml_cgraph* graph = ggml_new_graph(ggml_context);
+    ggml_build_forward_expand(graph, output);
+    struct ggml_cplan plan =
+        ggml_graph_plan(graph, ggml_n_threads_, nullptr);
+    if (plan.work_size > 0) {
+      ggml_work_buffer_.resize(plan.work_size);
+      plan.work_data = ggml_work_buffer_.data();
+    }
+    const enum ggml_status status = ggml_graph_compute(graph, &plan);
+    ggml_free(ggml_context);
+    if (status != GGML_STATUS_SUCCESS) {
+      LOG(ERROR) << "GGML Q8_0 GEMM failed with status "
+                 << static_cast<int>(status) << std::endl;
+      return AsStatus::ALLSPARK_RUNTIME_ERROR;
+    }
+
+    float* output_data = static_cast<float*>(out);
+    const int64_t output_count = m_ * n_;
+    if (alpha_ != 1.0f) {
+      for (int64_t i = 0; i < output_count; ++i) {
+        output_data[i] *= alpha_;
+      }
+    }
+    if (bias != nullptr) {
+      const float* bias_data = static_cast<const float*>(bias);
+      cpu::parallel_for(m_, [&](int64_t row) {
+        for (int64_t column = 0; column < n_; ++column) {
+          output_data[static_cast<size_t>(row) * n_ + column] +=
+              bias_data[column];
+        }
+      });
+    }
+    if (bin_in != nullptr) {
+      const float* binary_data = static_cast<const float*>(bin_in);
+      for (int64_t i = 0; i < output_count; ++i) {
+        output_data[i] += binary_data[i];
+      }
+    }
+    if (activation_ == UnaryType::SILU) {
+      for (int64_t i = 0; i < output_count; ++i) {
+        output_data[i] /= 1.0f + std::exp(-output_data[i]);
+      }
+    }
+    return AsStatus::ALLSPARK_SUCCESS;
+  }
+#endif
+
   const CPUContext* cpu_ctx = static_cast<const CPUContext*>(ctx_);
   auto eng = DNNLEngine::GetInstance().GetEngine();
   dnnl::memory& x_mem = *(dnnl_op_ctx_->ins_[0]);
@@ -213,5 +381,9 @@ AsStatus GemmOpCPU::Forward() {
   }
   return AsStatus::ALLSPARK_SUCCESS;
 }
+
+#ifndef ENABLE_ARM_V84_V9
+REGISTER_OP(Gemm, CPU, GemmOpCPU)
+#endif
 
 }  // namespace allspark

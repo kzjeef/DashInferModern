@@ -6,6 +6,7 @@ from .qwen_v15 import *
 
 class Qwen_v20(Qwen_v15):
     def __init__(self, torch_model, data_type, derive_type, **kwargs):
+        self.use_ggml_q8_0 = bool(kwargs.pop("use_ggml_q8_0", False))
         super(Qwen_v15, self).__init__("Qwen_v20", data_type, **kwargs)
         self.model.inputs.append(
             make_tensor("input_ids", np.empty(shape=(0, 0), dtype=np.int64))
