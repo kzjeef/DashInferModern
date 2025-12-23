@@ -1,4 +1,14 @@
 message("========== DNNL ==========")
+
+if(APPLE)
+    find_package(DNNL CONFIG REQUIRED)
+    set(ONEDNN_LIBRARY DNNL::dnnl)
+    add_custom_target(project_dnnl)
+    message("Use system oneDNN: ${ONEDNN_LIBRARY}")
+    message("==========================")
+    return()
+endif()
+
 message("Use onednn from submodule")
 set(DNNL_BLAS_VENDOR "NONE" CACHE STRING "")
 if (${RUNTIME_THREAD} STREQUAL "TBB")

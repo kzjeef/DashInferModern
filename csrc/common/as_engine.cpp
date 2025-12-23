@@ -1232,10 +1232,7 @@ static void PrintEngineStat(AsEngineStat& stat) {
 // if decoding was all idle, wait on the control comamnd queue.
 void AsEngineImpl::ModelRunningThread(
     std::string model_name, std::shared_ptr<ModelControlState> model_state) {
-  std::string s = "ModelRunningThread";
-  pthread_setname_np(pthread_self(),
-                     s.c_str());  // set the name (pthread_self() returns the
-                                  // pthread_t of the current thread)
+  setThreadName(0, "ModelRunningThread");
   bool looping = true;
   int continues_error_count = 0;  // accumulated error on run continue.
   const int k_main_loop_error_threshold =

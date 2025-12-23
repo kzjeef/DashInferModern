@@ -88,6 +88,20 @@ file(GLOB_RECURSE ALLSPARK_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/core/tensor/*.cpp
 )
 
+if(NOT ENABLE_JSON_MODE)
+    list(FILTER ALLSPARK_SRCS EXCLUDE REGEX
+         "/utility/format_enforcer\\.cpp$")
+endif()
+
+if(ENABLE_QWEN_ONLY)
+    list(FILTER ALLSPARK_SRCS EXCLUDE REGEX
+         "/core/model/(baichuan|bloom|chatglm|dolly|gpt2|gpt3|llama)/")
+    list(FILTER ALLSPARK_SRCS EXCLUDE REGEX
+         "/core/operator/generate_opt/mla_attn/")
+    list(FILTER ALLSPARK_SRCS EXCLUDE REGEX
+         "/core/operator/general/(calc_expert|moe|moe_lowp)/")
+endif()
+
 
 if (CONFIG_ACCELERATOR_TYPE STREQUAL "CUDA")
     file(GLOB_RECURSE ALLSPARK_ACC_DEVICE_SPECIAL

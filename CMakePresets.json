@@ -9,6 +9,7 @@
       "binaryDir": "${sourceDir}/build/macos-arm",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CONFIG_ACCELERATOR_TYPE": "NONE",
         "CONFIG_HOST_CPU_TYPE": "ARM",
@@ -23,6 +24,7 @@
         "ENABLE_FP8": "OFF",
         "ENABLE_NVFP4": "OFF",
         "ENABLE_GGML": "ON",
+        "ENABLE_QWEN_ONLY": "ON",
         "ENABLE_JSON_MODE": "OFF",
         "ALLSPARK_CBLAS": "ACCELERATE",
         "RUNTIME_THREAD": "OMP",
@@ -30,6 +32,7 @@
         "BUILD_HIEDNN": "OFF",
         "BUILD_PYTHON": "ON",
         "BUILD_UTEST": "OFF",
+        "BUILD_EXAMPLE": "OFF",
         "BUILD_PACKAGE": "OFF"
       }
     }

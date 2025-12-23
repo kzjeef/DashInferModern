@@ -33,7 +33,7 @@ void as_init_log() {
     fLI::FLAGS_stderrthreshold = google::ERROR;
     fLI::FLAGS_logbuflevel = 2;
     fLI::FLAGS_logbufsecs = 5;
-    fLI::FLAGS_max_log_size = 1024;
+    FLAGS_max_log_size = 1024;
 
     if (not log_dir or std::string(log_dir) == "") {
       fLB::FLAGS_logtostderr = true;

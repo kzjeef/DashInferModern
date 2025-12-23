@@ -49,39 +49,38 @@ fi
 if [ ! -d "./${build_folder}"  ]; then
     mkdir ${build_folder} && cd ${build_folder}
 
-    conan profile new dashinfer_compiler_profile --detect --force
-    conanfile=../conan/conanfile.txt
+    if [ "${with_platform}" != "macos" ]; then
+      conan profile new dashinfer_compiler_profile --detect --force
+      conanfile=../conan/conanfile.txt
 
-    if [ "${enable_multinuma}" == "ON" ]; then
-      conanfile=../conan/conanfile_openmpi.txt
-    fi
-
-    if [ "${with_platform}" == "armclang" ]; then
-      conanfile=../conan/conanfile_arm.txt
       if [ "${enable_multinuma}" == "ON" ]; then
-        conanfile=../conan/conanfile_openmpi_arm.txt
+        conanfile=../conan/conanfile_openmpi.txt
       fi
-      cp -f ../conan/conanprofile_armclang.aarch64 ~/.conan/profiles/dashinfer_compiler_profile
-      cp -r ../conan/settings_arm.yml ~/.conan/settings.yml
-    fi
 
-    if [ "${with_platform}" == "macos" ]; then
-      cp -f ../conan/conanprofile.macos_arm64 \
-        ~/.conan/profiles/dashinfer_compiler_profile
-    fi
+      if [ "${with_platform}" == "armclang" ]; then
+        conanfile=../conan/conanfile_arm.txt
+        if [ "${enable_multinuma}" == "ON" ]; then
+          conanfile=../conan/conanfile_openmpi_arm.txt
+        fi
+        cp -f ../conan/conanprofile_armclang.aarch64 ~/.conan/profiles/dashinfer_compiler_profile
+        cp -r ../conan/settings_arm.yml ~/.conan/settings.yml
+      fi
 
-    if [ "$enable_glibcxx11_abi" == "ON" ]; then
-      conan profile update settings.compiler.libcxx=libstdc++11 dashinfer_compiler_profile
-    else
-      conan profile update settings.compiler.libcxx=libstdc++ dashinfer_compiler_profile
-    fi
+      if [ "$enable_glibcxx11_abi" == "ON" ]; then
+        conan profile update settings.compiler.libcxx=libstdc++11 dashinfer_compiler_profile
+      else
+        conan profile update settings.compiler.libcxx=libstdc++ dashinfer_compiler_profile
+      fi
 
-    conan install ${conanfile} -pr dashinfer_compiler_profile -b missing -b protobuf -b gtest -b glog
+      conan install ${conanfile} -pr dashinfer_compiler_profile -b missing -b protobuf -b gtest -b glog
+    fi
     cd ../
 fi
 
 cd ${build_folder}
-source ./activate.sh
+if [ -f ./activate.sh ]; then
+  source ./activate.sh
+fi
 export PATH=`pwd`/bin:$PATH
 
 if [ "${with_platform}" == "cuda" ]; then
@@ -144,15 +143,25 @@ elif [ "${with_platform}" == "macos" ]; then
     exit 2
   fi
   homebrew_prefix="$(brew --prefix)"
+  for formula in libomp protobuf glog pybind11 onednn; do
+    if ! brew --prefix "${formula}" >/dev/null 2>&1; then
+      echo "Missing Homebrew dependency: ${formula}" >&2
+      echo "Install with: brew install libomp protobuf glog pybind11 onednn" >&2
+      exit 2
+    fi
+  done
   cmake .. \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=${build_type} \
+      -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_OSX_ARCHITECTURES=arm64 \
-      -DCMAKE_PREFIX_PATH="${homebrew_prefix}/opt/libomp" \
+      -DCMAKE_PREFIX_PATH="${homebrew_prefix};${homebrew_prefix}/opt/libomp" \
       -DBUILD_PACKAGE=OFF \
       -DCONFIG_ACCELERATOR_TYPE=NONE \
       -DCONFIG_HOST_CPU_TYPE=ARM \
       -DBUILD_PYTHON=ON \
+      -DBUILD_UTEST=OFF \
+      -DBUILD_EXAMPLE=OFF \
       -DBUILD_HIEDNN=OFF \
       -DALLSPARK_CBLAS=ACCELERATE \
       -DENABLE_CUDA=OFF \
@@ -164,6 +173,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DENABLE_FP8=OFF \
       -DENABLE_NVFP4=OFF \
       -DENABLE_GGML=ON \
+      -DENABLE_QWEN_ONLY=ON \
       -DENABLE_JSON_MODE=OFF \
       -DALWAYS_READ_LOAD_MODEL=ON \
       -DENABLE_MULTINUMA=OFF

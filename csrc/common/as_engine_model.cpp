@@ -7,9 +7,11 @@
 #include "as_engine_impl.h"
 #include "thread_utils.h"
 
-#include <common/env_config.h>
 #include <common/allocator.h>
+#include <common/as_param_check.hpp>
+#include <common/env_config.h>
 #include <cpu/cpu_info.h>
+#include <device/bfc_allocator.h>
 #include <fcntl.h>
 #include <git_version.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>

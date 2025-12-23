@@ -68,6 +68,13 @@ void StridedBatchGemmWraper<float>(float* matrix_C, const float* matrix_A,
   cblas_sgemm_batch_strided(CblasRowMajor, transA_, transB_, m, n, k, alpha,
                             matrix_A, lda, strideA, matrix_B, ldb, strideB,
                             beta, matrix_C, ldc, strideC, batch);
+#elif defined(ALLSPARK_USE_ACCELERATE_)
+  // Accelerate does not expose the grouped CBLAS batch extension.
+  for (int i = 0; i < batch; ++i) {
+    cblas_sgemm(CblasRowMajor, transA_, transB_, m, n, k, alpha,
+                matrix_A + i * strideA, lda, matrix_B + i * strideB, ldb,
+                beta, matrix_C + i * strideC, ldc);
+  }
 #elif defined(ALLSPARK_USE_CBLAS_)
   cblas_sgemm_batch(CblasRowMajor, &transA_, &transB_, &m, &n, &k, &alpha,
                     &matrix_A, &lda, &matrix_B, &ldb, &beta, &matrix_C, &ldc, 1,

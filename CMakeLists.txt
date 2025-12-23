@@ -76,6 +76,7 @@ option(LOCK_CHECK "check deadlock" OFF)
 option(ALWAYS_READ_LOAD_MODEL "load and parse model via every read" OFF)
 option(ENABLE_GLIBCXX11_ABI "build with cxx11 abi" OFF)
 option(ENABLE_GGML "enable GGML Q8_0 CPU kernels" OFF)
+option(ENABLE_QWEN_ONLY "build the dense Qwen runtime surface only" OFF)
 
 # Enable JSON Mode by using LMFE lib
 option(ENABLE_JSON_MODE "enable json mode support" ON)
@@ -132,12 +133,16 @@ add_definitions(-DALLSPARK_VERSION_MAJOR="${PROJECT_VERSION_MAJOR}")
 add_definitions(-DALLSPARK_VERSION_MINOR="${PROJECT_VERSION_MINOR}")
 add_definitions(-DALLSPARK_VERSION_PATCH="${PROJECT_VERSION_PATCH}")
 
-# 3rd dependency
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup(TARGETS)
-
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Protobuf REQUIRED)
+
+# 3rd dependency
+if(APPLE)
+    include(macos-deps)
+else()
+    include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+    conan_basic_setup(TARGETS)
+    find_package(Protobuf REQUIRED)
+endif()
 
 # thirdparty
 set(INSTALL_LOCATION
@@ -161,6 +166,10 @@ if (ENABLE_GGML)
     endif()
     list(APPEND ALLSPARK_DEFINITION "-DENABLE_GGML_GEMM")
     include(ggml)
+endif()
+
+if (ENABLE_QWEN_ONLY)
+    list(APPEND ALLSPARK_DEFINITION "-DENABLE_QWEN_ONLY")
 endif()
 
 if (ENABLE_JSON_MODE)

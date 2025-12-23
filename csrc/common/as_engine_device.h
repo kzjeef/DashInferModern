@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <allspark.pb.h>
 #include <interface/allspark.h>
 
 #include <string>
