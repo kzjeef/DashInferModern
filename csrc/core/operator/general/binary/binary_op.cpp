@@ -5,6 +5,8 @@
 
 #include "binary_op.h"  // NOLINT
 
+#include <cmath>
+
 #include <core/kernel/kernel.h>
 #include <utility/datatype_dispatcher.h>
 #ifdef ENABLE_CUDA
@@ -14,7 +16,11 @@
 using dnnl::memory;
 
 #define NO_INPLACE_BINARY 0
+#if defined(__APPLE__)
+#define USE_ONEDNN_BINARY 0
+#else
 #define USE_ONEDNN_BINARY 1
+#endif
 
 namespace allspark {
 AsStatus BinaryOp::Init(const OperatorProto& op_proto, const DeviceContext& ctx,
@@ -33,6 +39,7 @@ AsStatus BinaryOp::Init(const OperatorProto& op_proto, const DeviceContext& ctx,
   DeviceType backend = ctx.GetDeviceType();
   switch (backend) {
     case DeviceType::CPU: {
+#if USE_ONEDNN_BINARY
       dnnl_op_ctx_ = std::make_unique<DNNLOpContext>();
       auto& algo_map = DNNLOpContext::binary_algo_map_;
       if (algo_map.find(binary_type_) == algo_map.end()) {
@@ -49,6 +56,7 @@ AsStatus BinaryOp::Init(const OperatorProto& op_proto, const DeviceContext& ctx,
       }
       dnnl_op_ctx_->ins_.resize(2);
       dnnl_op_ctx_->outs_.resize(1);
+#endif
       break;
     }
 #ifdef ENABLE_CUDA
@@ -68,6 +76,7 @@ AsStatus BinaryOp::Reshape() {
   AS_CHECK_STATUS(
       tensor_map_->at(out_names_[0])->SetShape(std::move(out_shape)));
   if (ctx_->GetDeviceType() == DeviceType::CPU) {
+#if USE_ONEDNN_BINARY
     auto eng = DNNLEngine::GetInstance().GetEngine();
     memory::desc data_desc({out_shape.Count()}, memory::data_type::f32,
                            memory::format_tag::x);
@@ -93,6 +102,7 @@ AsStatus BinaryOp::Reshape() {
               eng, dnnl::prop_kind::forward_inference,
               dnnl::algorithm::eltwise_swish, data_desc, data_desc, 1.f, 0.f});
     }
+#endif
   }
   return AsStatus::ALLSPARK_SUCCESS;
 }
@@ -121,6 +131,7 @@ AsStatus BinaryOp::Forward() {
     }
 #endif
     case DeviceType::CPU: {
+#if USE_ONEDNN_BINARY
       dnnl::memory& in0_mem = *(dnnl_op_ctx_->ins_[0]);
       dnnl::memory& in1_mem = *(dnnl_op_ctx_->ins_[1]);
       dnnl::memory& out_mem = *(dnnl_op_ctx_->outs_[0]);
@@ -167,20 +178,55 @@ AsStatus BinaryOp::Forward() {
         }
 #endif
       } else {
-#if USE_ONEDNN_BINARY
         std::unordered_map<int, memory> args{{DNNL_ARG_SRC_0, in0_mem},
                                              {DNNL_ARG_SRC_1, in1_mem},
                                              {DNNL_ARG_DST, out_mem}};
         dnnl_op_ctx_->pr_fwd_[0]->execute(cpu_ctx->GetStream(), args);
-#else
-        // naive impl
-        for (size_t idx = 0; idx < y_tensor->GetShape().Count(); idx++) {
-          float y = ((float*)y_tensor->GetDataPtr())[idx];
-          float x = ((float*)x_tensor->GetDataPtr())[idx];
-          *(((float*)z_tensor->GetDataPtr()) + idx) = x + y;
-        }
-#endif
       }
+#else
+      if (x_tensor->GetDataType() != DataType::FLOAT32 ||
+          y_tensor->GetDataType() != DataType::FLOAT32) {
+        LOG(ERROR) << "The macOS binary fallback only supports FP32"
+                   << std::endl;
+        return AsStatus::ALLSPARK_RUNTIME_ERROR;
+      }
+      const float* x = static_cast<const float*>(x_tensor->GetDataPtr());
+      const float* y = static_cast<const float*>(y_tensor->GetDataPtr());
+      float* z = static_cast<float*>(z_tensor->GetDataPtr());
+      cpu::parallel_for(count, [&](int64_t idx) {
+        switch (binary_type_) {
+          case BinaryType::ADD:
+            z[idx] = x[idx] + y[idx];
+            break;
+          case BinaryType::MUL:
+            z[idx] = x[idx] * y[idx];
+            break;
+          case BinaryType::SWIGLU:
+            z[idx] = x[idx] * y[idx] / (1.0f + std::exp(-y[idx]));
+            break;
+          case BinaryType::GEGLU: {
+            constexpr float kGeluScale = 0.7978845608028654f;
+            const float y3 = y[idx] * y[idx] * y[idx];
+            const float gelu = 0.5f * y[idx] *
+                (1.0f + std::tanh(kGeluScale *
+                                  (y[idx] + 0.044715f * y3)));
+            z[idx] = x[idx] * gelu;
+            break;
+          }
+          default:
+            z[idx] = 0.0f;
+            break;
+        }
+      });
+      if (binary_type_ != BinaryType::ADD &&
+          binary_type_ != BinaryType::MUL &&
+          binary_type_ != BinaryType::SWIGLU &&
+          binary_type_ != BinaryType::GEGLU) {
+        LOG(ERROR) << "Unsupported binary type: "
+                   << BinaryType_Name(binary_type_) << std::endl;
+        return AsStatus::ALLSPARK_RUNTIME_ERROR;
+      }
+#endif
       break;
     }
     default:
