@@ -9,6 +9,7 @@ cuda_version="${AS_CUDA_VERSION:-12.4}"
 cuda_sm="${AS_CUDA_SM:-80;86;90a}"
 NCCL_VERSION="${AS_NCCL_VERSION:-2.23.4}"
 build_folder="${AS_BUILD_FOLDER:-build}"
+source_dir="$(pwd)"
 
 ## NCCL Version Map:
 ## the corresponding pre-build nccl will download on oss.
@@ -143,6 +144,7 @@ elif [ "${with_platform}" == "macos" ]; then
     exit 2
   fi
   homebrew_prefix="$(brew --prefix)"
+  build_package="OFF"
   for formula in libomp protobuf glog pybind11 onednn; do
     if ! brew --prefix "${formula}" >/dev/null 2>&1; then
       echo "Missing Homebrew dependency: ${formula}" >&2
@@ -160,6 +162,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DCONFIG_ACCELERATOR_TYPE=NONE \
       -DCONFIG_HOST_CPU_TYPE=ARM \
       -DBUILD_PYTHON=ON \
+      -DPYTHON_LIB_DIRS="${source_dir}/python/dashinfer/allspark" \
       -DBUILD_UTEST=OFF \
       -DBUILD_EXAMPLE=OFF \
       -DBUILD_HIEDNN=OFF \

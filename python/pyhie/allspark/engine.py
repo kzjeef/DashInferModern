@@ -118,6 +118,7 @@ class Engine(AsEngine):
             seqlen_extrapolation=1.0,
             lora_cfg=None,
             rotary_base=10000.0,
+            use_ggml_q8_0=False,
     ):
         """
         Convert a pytorch model(huggingface format or a megatron format) to allspark model format,
@@ -142,6 +143,7 @@ class Engine(AsEngine):
             seqlen_extrapolation:  [TODO] move to model config
             lora_cfg:   [TODO] LORA config
             rotary_base: [TODO] move to model config.
+            use_ggml_q8_0: opt in to the Qwen-only GGML Q8_0 CPU path.
 
         Returns: This function don't return, will throw exception if meets error.
 
@@ -170,7 +172,8 @@ class Engine(AsEngine):
             model_sequence_length,
             seqlen_extrapolation,
             lora_cfg,
-            rotary_base)
+            rotary_base,
+            use_ggml_q8_0=use_ggml_q8_0)
 
     def dump_build_meta_to_proto(self, model_proto, weights_path,
                                  torch_build_param):

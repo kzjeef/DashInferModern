@@ -743,12 +743,14 @@ class HuggingFaceModel(LLM):
 
 
     def serialize(self, engine, model_output_dir: str = "", enable_quant=False, weight_only_quant=False,
-                  customized_quant_config=None, multinode_mode=True, lora_cfg=None):
+                  customized_quant_config=None, multinode_mode=True, lora_cfg=None,
+                  use_ggml_q8_0=False):
         if self.in_memory_serialize:
             return self.serialize_to_memory(engine, enable_quant=enable_quant, weight_only_quant=weight_only_quant,
                                             multinode_mode=multinode_mode,
                                             customized_quant_config=customized_quant_config,
-                                            lora_cfg=lora_cfg)
+                                            lora_cfg=lora_cfg,
+                                            use_ggml_q8_0=use_ggml_q8_0)
         else:
             if not model_output_dir:
                 raise ValueError("model_output_dir is required for non-in-memory serialize")
@@ -756,9 +758,10 @@ class HuggingFaceModel(LLM):
                                           multinode_mode=multinode_mode,
                                           weight_only_quant=weight_only_quant,
                                           customized_quant_config=customized_quant_config,
-                                          lora_cfg=lora_cfg)
+                                          lora_cfg=lora_cfg,
+                                          use_ggml_q8_0=use_ggml_q8_0)
 
-    def serialize_to_memory(self, engine, enable_quant=False, weight_only_quant=False, multinode_mode=True, customized_quant_config=None, lora_cfg=None):
+    def serialize_to_memory(self, engine, enable_quant=False, weight_only_quant=False, multinode_mode=True, customized_quant_config=None, lora_cfg=None, use_ggml_q8_0=False):
         """serialize the model, and save into memory file
 
         Returns: return two file path for in file tmp memory
@@ -801,7 +804,8 @@ class HuggingFaceModel(LLM):
                                           quant_config=as_quant_config,
                                           as_model_path=self.temp_model_file.name,
                                           as_weight_path=self.temp_weight_file.name,
-                                          lora_cfg=lora_cfg)
+                                          lora_cfg=lora_cfg,
+                                          use_ggml_q8_0=use_ggml_q8_0)
         # free all gpu memory during serialization
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -813,7 +817,8 @@ class HuggingFaceModel(LLM):
         return self
 
     def serialize_to_path(self, engine, model_output_dir: str = "", enable_quant=False, weight_only_quant=False,
-                          skip_if_exists=False, multinode_mode=True, customized_quant_config=None, lora_cfg=None):
+                          skip_if_exists=False, multinode_mode=True, customized_quant_config=None, lora_cfg=None,
+                          use_ggml_q8_0=False):
         """
         start serialize loaded model and write to dir, and free the torch model to save memory.
         Args:
@@ -871,7 +876,8 @@ class HuggingFaceModel(LLM):
                                               rotary_base=self.as_model_config["rotary_emb_base"],
                                               quant_config=as_quant_config,
                                               save_dir=model_output_dir,
-                                              lora_cfg=lora_cfg)
+                                              lora_cfg=lora_cfg,
+                                              use_ggml_q8_0=use_ggml_q8_0)
 
         # free all gpu memory during serialization
         if torch.cuda.is_available():

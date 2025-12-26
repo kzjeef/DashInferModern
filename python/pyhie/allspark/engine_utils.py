@@ -74,6 +74,7 @@ class EngineUtils:
                                    seqlen_extrapolation=1.0,
                                    lora_cfg=None,
                                    rotary_base=10000.0,
+                                   use_ggml_q8_0=False,
                                    dump_param_to_dict={},
                                    **kwargs):
         print(f"serialize_model_from_torch: quant config:{quant_config}")
@@ -123,6 +124,7 @@ class EngineUtils:
             seqlen_extrapolation=seqlen_extrapolation,
             lora_cfg=lora_cfg,
             rotary_base=rotary_base,
+            use_ggml_q8_0=use_ggml_q8_0,
         )()  #use map weight for build model to decrease time consumption
         dump_param_to_dict['only_convert_lora'] = only_convert_lora
         model_proto = self.dump_build_meta_to_proto(model_proto, weights_path,
