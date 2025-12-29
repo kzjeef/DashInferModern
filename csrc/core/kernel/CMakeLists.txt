@@ -116,8 +116,7 @@ if (ENABLE_CUDA)
     )
     list(APPEND CUDA_COMMON_KERNEL_SRC ${CUDA_COMMON_KERNEL_SRC_TMP})
 
-    # CUTLASS 4 SM100 code is compiled by its own target. The project-wide
-    # kernel target uses a different CUTLASS version and architecture list.
+    # The retired SM100 NVFP4 source is excluded from the common kernel target.
     list(REMOVE_ITEM CUDA_COMMON_KERNEL_SRC
       "${CMAKE_CURRENT_SOURCE_DIR}/cuda/gemm_lowp/gemm_nvfp4_blockwise_sm100.cu")
 
@@ -154,10 +153,6 @@ target_link_libraries(allspark_kernel PRIVATE ${KERNEL_3RD_LIBS} CONAN_PKG::glog
 target_compile_definitions(allspark_kernel PUBLIC ${ALLSPARK_DEFINITION})
 add_dependencies(allspark_kernel protobuf_target)
 target_compile_options(allspark_kernel PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${ALLSPARK_CXX_FLAGS}>)
-if(NVFP4_GEMM_ENABLED)
-  target_link_libraries(allspark_kernel PUBLIC nvfp4_gemm)
-  target_compile_definitions(allspark_kernel PUBLIC ENABLE_SM100_NVFP4=1)
-endif()
 if(ALLSPARK_CBLAS MATCHES "BLIS")
     add_dependencies(allspark_kernel project_blis)
 endif()

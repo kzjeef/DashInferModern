@@ -22,7 +22,6 @@
         "ENABLE_BF16": "ON",
         "ENABLE_FP16": "ON",
         "ENABLE_FP8": "OFF",
-        "ENABLE_NVFP4": "OFF",
         "ENABLE_GGML": "ON",
         "ENABLE_QWEN_ONLY": "ON",
         "ENABLE_JSON_MODE": "OFF",
