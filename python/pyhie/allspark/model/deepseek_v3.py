@@ -7,11 +7,6 @@ from .utils import WeightNameAdapter
 from ..quantization import *
 from .quantization_utils import *
 from .fp8_weights import merge_fp8_linears, validate_fp8_linear
-from .nvfp4_weights import (
-    NVFP4_AUX_SUFFIXES,
-    merge_nvfp4_linears,
-    validate_nvfp4_linear,
-)
 import re
 
 
@@ -36,12 +31,6 @@ class DeepSeek_v3(Model):
                 and not self.is_fp8_blockwise):
             raise ValueError(
                 "DeepSeek-V3 currently requires native block-wise FP8")
-        self.is_nvfp4 = (
-            self.model_config.get("is_fp4_model", False)
-            and self.model_config.get("fp4_quant_method") == "nvfp4")
-        self.nvfp4_block_size = self.model_config.get(
-            "nvfp4_block_size", 16)
-        self.nvfp4_native_weights = set()
         self._merge_gate_proj(torch_model)
         self.weight_real_names = set()
         for v in torch_model:
@@ -76,14 +65,6 @@ class DeepSeek_v3(Model):
                             up_proj_key,
                             new_key,
                             self.fp8_block_size)
-                    elif (self.is_nvfp4 and
-                          torch_model[key].dtype == torch.uint8):
-                        merge_nvfp4_linears(
-                            torch_model,
-                            key,
-                            up_proj_key,
-                            new_key,
-                            self.nvfp4_block_size)
                     else:
                         tensor = torch.concat([
                             torch_model[key], torch_model[up_proj_key]
@@ -562,22 +543,6 @@ class DeepSeek_v3(Model):
                 quantize_gemm_fp8_blockwise(op, self.fp8_block_size)
                 self.fp8_native_weights.add(op.weights[0].name)
 
-        if self.is_nvfp4 and not self.do_dynamic_quantize_convert:
-            for op in graph.ops:
-                if (not op.op_type.upper().startswith("GEMM")
-                        or not op.weights
-                        or op.weights[0].name not in self.weight_name_map):
-                    continue
-                torch_name = self.weight_name_map[op.weights[0].name]
-                if not isinstance(torch_name, str):
-                    continue
-                torch_base = torch_name.rsplit(".weight", 1)[0]
-                if torch_base + ".weight_scale" not in self.weight_real_names:
-                    continue
-                quantize_gemm_nvfp4_blockwise(
-                    op, self.nvfp4_block_size)
-                self.nvfp4_native_weights.add(op.weights[0].name)
-
         ##############################################################################################
         # Output layer
         ##############################################################################################
@@ -707,38 +672,6 @@ class DeepSeek_v3(Model):
                     torch_weight[source_scale].cpu().contiguous(),
                     mode, NOSPLIT, [])
                 torch_weight[source_scale] = torch.Tensor(0)
-                torch_weight[torch_name] = torch.Tensor(0)
-                continue
-
-            if (not lora_name and self.is_nvfp4
-                    and key in self.nvfp4_native_weights):
-                if not isinstance(torch_name, str):
-                    raise ValueError(
-                        "NVFP4 graph GEMM weights must map to one tensor")
-                validate_nvfp4_linear(
-                    torch_weight, torch_name, self.nvfp4_block_size)
-
-                mode = DENSE if key not in sparse_map else sparse_map[key]
-                split_mode = (NOSPLIT if key not in split_map
-                              else split_map[key])
-                if split_mode != NOSPLIT:
-                    raise ValueError(
-                        "NVFP4 packed weight splitting is not available; "
-                        "serialize the miniature model with multinode_mode=False")
-
-                source_base = torch_name[:-len(".weight")]
-                save_torch_to_allsparky(
-                    weights_path, key, torch_weight[torch_name].cpu(),
-                    mode, NOSPLIT, [])
-                for suffix in NVFP4_AUX_SUFFIXES:
-                    source_name = source_base + suffix
-                    auxiliary = torch_weight[source_name].cpu().contiguous()
-                    if auxiliary.numel() == 1:
-                        auxiliary = auxiliary.reshape(1)
-                    save_torch_to_allsparky(
-                        weights_path, key + suffix, auxiliary,
-                        mode, NOSPLIT, [])
-                    torch_weight[source_name] = torch.Tensor(0)
                 torch_weight[torch_name] = torch.Tensor(0)
                 continue
 

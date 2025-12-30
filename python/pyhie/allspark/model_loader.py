@@ -422,10 +422,10 @@ class HuggingFaceModel(LLM):
             raise ValueError(
                 "Native FP8 checkpoints require direct_load=True so FP8 "
                 "weights and scale tensors remain intact")
-        if self.nvfp4_config["enabled"] and not direct_load:
+        if self.nvfp4_config["enabled"]:
             raise ValueError(
-                "ModelOpt NVFP4 checkpoints require direct_load=True so "
-                "packed FP4 weights and their scale tensors remain intact")
+                "ModelOpt NVFP4 checkpoints are unsupported because the "
+                "SM100 backend has been retired")
         # for model convert, only require cpu memory
         if not direct_load:
             # the open-source model can be loaded by huggingface 
@@ -482,12 +482,6 @@ class HuggingFaceModel(LLM):
                 self.fp8_config["format"]
             self.as_model_config["fp8_block_size"] = list(
                 self.fp8_config["block_size"])
-        if self.nvfp4_config["enabled"]:
-            self.as_model_config["is_fp4_model"] = True
-            self.as_model_config["fp4_quant_method"] = "nvfp4"
-            self.as_model_config["nvfp4_block_size"] = \
-                self.nvfp4_config["block_size"]
-
         # For JSON Mode
         # try to get tokenizer
         try:
