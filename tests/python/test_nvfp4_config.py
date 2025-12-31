@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Segno System.
-"""Unit tests for ModelOpt NVFP4 metadata detection."""
+"""Unit tests for the retired ModelOpt NVFP4 checkpoint guard."""
 
 import importlib.util
 import json
@@ -90,6 +90,17 @@ class ModelOptNVFP4DetectionTest(unittest.TestCase):
             result = NVFP4_CONFIG.detect_modelopt_nvfp4(directory)
 
         self.assertFalse(result["enabled"])
+
+    def test_rejects_nvfp4_before_weight_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self._write_json(directory, "hf_quant_config.json", {
+                "quantization": {
+                    "quant_algo": "NVFP4",
+                    "group_size": 16,
+                },
+            })
+            with self.assertRaisesRegex(ValueError, "SM100 backend"):
+                NVFP4_CONFIG.reject_unsupported_modelopt_nvfp4(directory)
 
 
 if __name__ == "__main__":

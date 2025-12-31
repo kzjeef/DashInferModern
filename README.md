@@ -144,22 +144,6 @@ shape, and dtype before returning. The second command requires a CUDA build of
 DashInfer and one CUDA GPU. A successful run prints
 `PASS: tiny DeepSeek-V3 prefill/decode` and generated token IDs.
 
-For native ModelOpt NVFP4, build for an SM100 GPU with CUDA 12.8 or newer,
-then generate and run the dense-only mini checkpoint:
-
-```bash
-AS_CUDA_VERSION=12.8 AS_CUDA_SM=100a bash build.sh
-python create_tiny_dsv3_nvfp4.py --output /tmp/tiny-dsv3-nvfp4
-python examples/python/0_basic/cuda/basic_example_deepseek_v3_nvfp4_tiny.py \
-  /tmp/tiny-dsv3-nvfp4
-```
-
-The NVFP4 loader keeps FP4 weights packed from checkpoint serialization
-through the native tensor-core GEMM. The mini checkpoint uses dense FFN layers
-because native NVFP4 expert GEMM is not part of this initial path. A successful
-run prints `PASS: tiny DeepSeek-V3 NVFP4 prefill/decode` and generated token
-IDs.
-
 ## Multi-Modal Model(VLMs) Support
 
 The VLM Support in [multimodal](multimodal/) folder, it's a toolkit to support Vision Language Models (VLMs) inference based on the DashInfer engine. It's compatible with the OpenAI Chat Completion API, supporting text and image/video inputs.

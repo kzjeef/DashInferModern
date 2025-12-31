@@ -21,7 +21,10 @@ from .quant.gptq_iq_adapter import GPTQ2IQWeightAdapter
 from .quantization import QuantizeConfig
 from ._allspark import VocabType
 from .fp8_config import detect_native_fp8
-from .nvfp4_config import detect_modelopt_nvfp4
+from .nvfp4_config import (
+    detect_modelopt_nvfp4,
+    reject_unsupported_modelopt_nvfp4,
+)
 
 
 class ConfigFieldMissingError(ValueError):
@@ -417,15 +420,12 @@ class HuggingFaceModel(LLM):
         """
         kwargs["device_map"] = "cpu"
         self.fp8_config = detect_native_fp8(self.hf_model_path)
-        self.nvfp4_config = detect_modelopt_nvfp4(self.hf_model_path)
+        self.nvfp4_config = reject_unsupported_modelopt_nvfp4(
+            self.hf_model_path)
         if self.fp8_config["enabled"] and not direct_load:
             raise ValueError(
                 "Native FP8 checkpoints require direct_load=True so FP8 "
                 "weights and scale tensors remain intact")
-        if self.nvfp4_config["enabled"]:
-            raise ValueError(
-                "ModelOpt NVFP4 checkpoints are unsupported because the "
-                "SM100 backend has been retired")
         # for model convert, only require cpu memory
         if not direct_load:
             # the open-source model can be loaded by huggingface 

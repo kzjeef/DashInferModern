@@ -22,7 +22,7 @@ class GGMLQ8ContractTest(unittest.TestCase):
         cache = macos["cacheVariables"]
         self.assertEqual("ON", cache["ENABLE_GGML"])
         self.assertEqual("OFF", cache["ENABLE_CUDA"])
-        self.assertEqual("OFF", cache["ENABLE_NVFP4"])
+        self.assertNotIn("ENABLE_NVFP4", cache)
         self.assertEqual("OFF", cache["ENABLE_FP8"])
 
     def test_ggml_revision_is_immutable_and_cpu_only(self):

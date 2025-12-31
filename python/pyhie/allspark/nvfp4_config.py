@@ -68,3 +68,13 @@ def detect_modelopt_nvfp4(model_path: str) -> Dict[str, Any]:
         return result
 
     return result
+
+
+def reject_unsupported_modelopt_nvfp4(model_path: str) -> Dict[str, Any]:
+    """Reject packed NVFP4 checkpoints before any weight tensors are loaded."""
+    result = detect_modelopt_nvfp4(model_path)
+    if result["enabled"]:
+        raise ValueError(
+            "ModelOpt NVFP4 checkpoints are unsupported because the "
+            "SM100 backend has been retired")
+    return result
