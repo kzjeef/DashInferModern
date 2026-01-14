@@ -143,7 +143,7 @@ class ASGenerationConfigBuilder:
         Args:
             info: the multi-media information of this request
         """
-        self.update('mm_info', info)
+        self.update({'mm_info': info})
         return self
 
     def early_stopping(self, flag=True):
@@ -171,7 +171,6 @@ class ASGenerationConfigBuilder:
         """
         # we need a shallow copy here so that doing 'pop["vocab"]' won't forever remove vocab from builder
         return self.dict_store.copy()
-
 
 
 
