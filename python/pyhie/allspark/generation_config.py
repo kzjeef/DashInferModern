@@ -67,7 +67,8 @@ class ASGenerationConfigBuilder:
         lora_name (str): Name of the LoRA adaptation, if applicable.
         mm_info (MultiMediaInfo): Multimedia information, specific to certain use cases.
     """
-    def __init__(self, hf_gen_config: GenerationConfig = None, seed=random.randint(1, as_rand_max_int), eos_token_id = 0):
+    def __init__(self, hf_gen_config: GenerationConfig = None, seed=None,
+                 eos_token_id=0):
         """
         Create a generate config, if hf_gen_config is None, use provided eos token, otherwise use hf config's eos.
         Args:
@@ -75,6 +76,9 @@ class ASGenerationConfigBuilder:
             seed: default seed.
             eos_token_id: provided eos token, only useful when hf config is not available
         """
+        if seed is None:
+            seed = random.randint(1, as_rand_max_int)
+
         if hf_gen_config == None:
 
             self.dict_store = {'do_sample': True, "seed": seed, "eos_token_id": eos_token_id}
@@ -171,6 +175,5 @@ class ASGenerationConfigBuilder:
         """
         # we need a shallow copy here so that doing 'pop["vocab"]' won't forever remove vocab from builder
         return self.dict_store.copy()
-
 
 

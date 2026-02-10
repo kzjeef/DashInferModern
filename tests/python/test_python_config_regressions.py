@@ -32,6 +32,15 @@ GENERATION_CONFIG = _load_generation_config()
 
 class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_default_seed_is_generated_for_each_builder(self):
+        with mock.patch.object(
+                GENERATION_CONFIG.random, "randint", side_effect=[101, 202]):
+            first = GENERATION_CONFIG.ASGenerationConfigBuilder().build()
+            second = GENERATION_CONFIG.ASGenerationConfigBuilder().build()
+
+        self.assertEqual(101, first["seed"])
+        self.assertEqual(202, second["seed"])
+
     def test_multimedia_info_is_stored_by_key(self):
         info = object()
         config = (
