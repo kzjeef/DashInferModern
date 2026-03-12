@@ -108,6 +108,8 @@ class ASGenerationConfigBuilder:
     def process_eos_tokens(hf_gen_config_token_id, out_dict):
         if isinstance(hf_gen_config_token_id, int):
             out_dict["eos_token_id"] = hf_gen_config_token_id
+        elif isinstance(hf_gen_config_token_id, list) and not hf_gen_config_token_id:
+            raise ValueError("eos_token_id list must not be empty")
         elif isinstance(hf_gen_config_token_id, list) and all(
                 isinstance(item, int) for item in hf_gen_config_token_id):
             out_dict["eos_token_id"] = hf_gen_config_token_id[0]
@@ -175,5 +177,4 @@ class ASGenerationConfigBuilder:
         """
         # we need a shallow copy here so that doing 'pop["vocab"]' won't forever remove vocab from builder
         return self.dict_store.copy()
-
 

@@ -32,6 +32,11 @@ GENERATION_CONFIG = _load_generation_config()
 
 class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_empty_eos_token_list_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "must not be empty"):
+            GENERATION_CONFIG.ASGenerationConfigBuilder.process_eos_tokens(
+                [], {})
+
     def test_default_seed_is_generated_for_each_builder(self):
         with mock.patch.object(
                 GENERATION_CONFIG.random, "randint", side_effect=[101, 202]):
