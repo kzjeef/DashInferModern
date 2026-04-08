@@ -240,7 +240,7 @@ class AsModelRuntimeConfigBuilder:
         if "cache_span_num_init" in rfield:
             self.set_span_init_size(int(rfield['cache_span_num_init']))
         if "engine_max_prefill_length" in rfield:
-            self.max_prefill_length(int(rfield("engine_max_prefill_length")))
+            self.max_prefill_length(int(rfield["engine_max_prefill_length"]))
         if "engine_max_length" in rfield:
             self.max_length(int(rfield["engine_max_length"]))
         if "engine_max_batch" in rfield:

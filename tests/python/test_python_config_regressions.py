@@ -30,6 +30,55 @@ def _load_generation_config():
 GENERATION_CONFIG = _load_generation_config()
 
 
+class _FakeAsModelConfig:
+
+    def __init__(self):
+        self.lora_max_rank = 0
+        self.lora_max_num = 0
+
+
+class _FakeAsCacheMode(enum.Enum):
+    AsCacheDefault = 0
+    AsCacheQuantI8 = 1
+    AsCacheQuantU4 = 2
+
+
+class _FakeTargetDevice(enum.Enum):
+    CUDA = 0
+    CPU = 1
+    CPU_NUMA = 2
+
+
+def _load_runtime_config():
+    package_name = "_allspark_config_regression"
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(ALLSPARK_ROOT)]
+
+    native = types.ModuleType(f"{package_name}._allspark")
+    native.AsModelConfig = _FakeAsModelConfig
+    native.AsCacheMode = _FakeAsCacheMode
+
+    engine = types.ModuleType(f"{package_name}.engine")
+    engine.TargetDevice = _FakeTargetDevice
+
+    spec = importlib.util.spec_from_file_location(
+        f"{package_name}.runtime_config",
+        ALLSPARK_ROOT / "runtime_config.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    stubs = {
+        package_name: package,
+        f"{package_name}._allspark": native,
+        f"{package_name}.engine": engine,
+    }
+    with mock.patch.dict(sys.modules, stubs):
+        spec.loader.exec_module(module)
+    return module
+
+
+RUNTIME_CONFIG = _load_runtime_config()
+
+
 class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
     def test_empty_eos_token_list_is_rejected(self):
@@ -55,6 +104,15 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
         )
 
         self.assertIs(info, config["mm_info"])
+
+
+class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
+
+    def test_prefill_length_is_read_from_mapping(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        builder.update_from_dict({"engine_max_prefill_length": "256"})
+
+        self.assertEqual(256, builder.new_runtime_cfg.engine_max_prefill_length)
 
 
 if __name__ == "__main__":
