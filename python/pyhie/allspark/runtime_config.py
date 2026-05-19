@@ -18,6 +18,20 @@ def get_cache_mode_from_str(s):
     raise ValueError(f"unknown cache mode found: {s}")
 
 
+def _parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True
+        if normalized in ("false", "0", "no", "off"):
+            return False
+    raise ValueError(f"invalid boolean value: {value!r}")
+
+
 class AsModelRuntimeConfigBuilder:
 
     def __init__(self):
@@ -228,7 +242,7 @@ class AsModelRuntimeConfigBuilder:
     def update_from_dict(self, rfield):
         """ Update dict, """
         if "enable_prefix_cache" in rfield:
-            self.prefill_cache(bool(rfield['enable_prefix_cache']))
+            self.prefill_cache(_parse_bool(rfield['enable_prefix_cache']))
         if "prefix_cache_ttl" in rfield:
             self.prefix_cache_ttl(int(rfield['prefix_cache_ttl']))
         if "kv_cache_mode" in rfield:
@@ -236,7 +250,8 @@ class AsModelRuntimeConfigBuilder:
         if "kv_cache_span_size" in rfield:
             self.kv_cache_span_size(int(rfield['kv_cache_span_size']))
         if "enable_sparsity_matmul" in rfield:
-            self.enable_sparsity_matmul(bool(rfield['enable_sparsity_matmul']))
+            self.enable_sparsity_matmul(
+                _parse_bool(rfield['enable_sparsity_matmul']))
         if "cache_span_num_init" in rfield:
             self.set_span_init_size(int(rfield['cache_span_num_init']))
         if "engine_max_prefill_length" in rfield:

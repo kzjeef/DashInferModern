@@ -108,6 +108,21 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
 class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_false_strings_do_not_enable_runtime_features(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        builder.update_from_dict({
+            "enable_prefix_cache": "false",
+            "enable_sparsity_matmul": "0",
+        })
+
+        self.assertFalse(builder.new_runtime_cfg.enable_prefix_cache)
+        self.assertFalse(builder.new_runtime_cfg.enable_sparsity_matmul)
+
+    def test_invalid_boolean_strings_are_rejected(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        with self.assertRaisesRegex(ValueError, "invalid boolean"):
+            builder.update_from_dict({"enable_prefix_cache": "sometimes"})
+
     def test_prefill_length_is_read_from_mapping(self):
         builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
         builder.update_from_dict({"engine_max_prefill_length": "256"})
