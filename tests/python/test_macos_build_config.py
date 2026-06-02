@@ -34,6 +34,12 @@ class MacOSBuildConfigTest(unittest.TestCase):
         self.assertIn("compiler=apple-clang", profile)
         self.assertIn("compiler.libcxx=libc++", profile)
 
+    def test_native_build_uses_an_isolated_directory(self):
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn('build_folder="build/macos-arm"', build_script)
+        self.assertIn('build_folder="${AS_BUILD_FOLDER}"', build_script)
+        self.assertIn('mkdir -p "${build_folder}"', build_script)
+
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS SDK")
     def test_accelerate_cblas_header_compiles(self):
         source = r"""

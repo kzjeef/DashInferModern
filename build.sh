@@ -8,7 +8,13 @@ with_platform="${AS_PLATFORM:-cuda}"
 cuda_version="${AS_CUDA_VERSION:-12.4}"
 cuda_sm="${AS_CUDA_SM:-80;86;90a}"
 NCCL_VERSION="${AS_NCCL_VERSION:-2.23.4}"
-build_folder="${AS_BUILD_FOLDER:-build}"
+if [ -n "${AS_BUILD_FOLDER:-}" ]; then
+  build_folder="${AS_BUILD_FOLDER}"
+elif [ "${with_platform}" = "macos" ]; then
+  build_folder="build/macos-arm"
+else
+  build_folder="build"
+fi
 source_dir="$(pwd)"
 
 ## NCCL Version Map:
@@ -48,7 +54,7 @@ if [ "$clean" == "ON" ]; then
 fi
 
 if [ ! -d "./${build_folder}"  ]; then
-    mkdir ${build_folder} && cd ${build_folder}
+    mkdir -p "${build_folder}" && cd "${build_folder}"
 
     if [ "${with_platform}" != "macos" ]; then
       conan profile new dashinfer_compiler_profile --detect --force
@@ -78,7 +84,7 @@ if [ ! -d "./${build_folder}"  ]; then
     cd ../
 fi
 
-cd ${build_folder}
+cd "${build_folder}"
 if [ -f ./activate.sh ]; then
   source ./activate.sh
 fi
