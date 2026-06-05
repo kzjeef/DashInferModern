@@ -40,6 +40,12 @@ class MacOSBuildConfigTest(unittest.TestCase):
         self.assertIn('build_folder="${AS_BUILD_FOLDER}"', build_script)
         self.assertIn('mkdir -p "${build_folder}"', build_script)
 
+    def test_native_build_selects_the_active_macos_sdk(self):
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn("command -v xcrun", build_script)
+        self.assertIn("xcrun --sdk macosx --show-sdk-path", build_script)
+        self.assertIn('-DCMAKE_OSX_SYSROOT="${macos_sdk_root}"', build_script)
+
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS SDK")
     def test_accelerate_cblas_header_compiles(self):
         source = r"""

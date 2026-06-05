@@ -149,6 +149,15 @@ elif [ "${with_platform}" == "macos" ]; then
     echo "AS_PLATFORM=macos requires Apple Silicon macOS" >&2
     exit 2
   fi
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "AS_PLATFORM=macos requires Xcode command line tools" >&2
+    exit 2
+  fi
+  macos_sdk_root="$(xcrun --sdk macosx --show-sdk-path)"
+  if [ -z "${macos_sdk_root}" ]; then
+    echo "Unable to locate the active macOS SDK" >&2
+    exit 2
+  fi
   homebrew_prefix="$(brew --prefix)"
   build_package="OFF"
   for formula in libomp protobuf glog pybind11 onednn; do
@@ -163,6 +172,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DCMAKE_BUILD_TYPE=${build_type} \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_OSX_ARCHITECTURES=arm64 \
+      -DCMAKE_OSX_SYSROOT="${macos_sdk_root}" \
       -DCMAKE_PREFIX_PATH="${homebrew_prefix};${homebrew_prefix}/opt/libomp" \
       -DBUILD_PACKAGE=OFF \
       -DCONFIG_ACCELERATOR_TYPE=NONE \
