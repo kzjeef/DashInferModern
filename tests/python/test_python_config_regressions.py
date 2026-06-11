@@ -108,6 +108,14 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
 class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_builder_reset_preserves_lora_defaults(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        builder.build()
+        second = builder.build()
+
+        self.assertEqual(64, second.lora_max_rank)
+        self.assertEqual(5, second.lora_max_num)
+
     def test_false_strings_do_not_enable_runtime_features(self):
         builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
         builder.update_from_dict({

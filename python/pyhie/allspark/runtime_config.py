@@ -41,9 +41,14 @@ class AsModelRuntimeConfigBuilder:
         self.engine_max_batch = 32
         self.engine_max_length = 2048
 
-        self.new_runtime_cfg = AsModelConfig()
-        self.new_runtime_cfg.lora_max_rank = 64
-        self.new_runtime_cfg.lora_max_num = 5
+        self.new_runtime_cfg = self._new_runtime_config()
+
+    @staticmethod
+    def _new_runtime_config():
+        config = AsModelConfig()
+        config.lora_max_rank = 64
+        config.lora_max_num = 5
+        return config
 
     """
     The Runtime config, such as max batch, max length, and runtime feature like kv-cache quantization, etc.
@@ -268,5 +273,5 @@ class AsModelRuntimeConfigBuilder:
     def build(self) -> AsModelConfig:
         # make sure next build call will create a new config.
         ret = self.new_runtime_cfg
-        self.new_runtime_cfg = AsModelConfig()
+        self.new_runtime_cfg = self._new_runtime_config()
         return ret
