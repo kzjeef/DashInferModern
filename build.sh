@@ -27,6 +27,7 @@ source_dir="$(pwd)"
 
 system_nv_lib="${AS_SYSTEM_NV_LIB:-OFF}"
 build_type="${AS_BUILD_TYPE:-Release}"
+python_executable="${AS_PYTHON_EXECUTABLE:-}"
 cuda_static="${AS_CUDA_STATIC:-OFF}"
 build_package="${AS_BUILD_PACKAGE:-ON}"
 enable_glibcxx11_abi="${AS_CXX11_ABI:-OFF}"
@@ -158,6 +159,13 @@ elif [ "${with_platform}" == "macos" ]; then
     echo "Unable to locate the active macOS SDK" >&2
     exit 2
   fi
+  if [ -z "${python_executable}" ]; then
+    python_executable="$(command -v python3 || true)"
+  fi
+  if [ ! -x "${python_executable}" ]; then
+    echo "AS_PLATFORM=macos requires a Python 3 interpreter" >&2
+    exit 2
+  fi
   homebrew_prefix="$(brew --prefix)"
   build_package="OFF"
   for formula in libomp protobuf glog pybind11 onednn; do
@@ -173,6 +181,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_OSX_ARCHITECTURES=arm64 \
       -DCMAKE_OSX_SYSROOT="${macos_sdk_root}" \
+      -DPYTHON_EXECUTABLE="${python_executable}" \
       -DCMAKE_PREFIX_PATH="${homebrew_prefix};${homebrew_prefix}/opt/libomp" \
       -DBUILD_PACKAGE=OFF \
       -DCONFIG_ACCELERATOR_TYPE=NONE \

@@ -46,6 +46,14 @@ class MacOSBuildConfigTest(unittest.TestCase):
         self.assertIn("xcrun --sdk macosx --show-sdk-path", build_script)
         self.assertIn('-DCMAKE_OSX_SYSROOT="${macos_sdk_root}"', build_script)
 
+    def test_native_build_honors_the_selected_python(self):
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn('python_executable="${AS_PYTHON_EXECUTABLE:-}"',
+                      build_script)
+        self.assertIn("command -v python3", build_script)
+        self.assertIn('-DPYTHON_EXECUTABLE="${python_executable}"',
+                      build_script)
+
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS SDK")
     def test_accelerate_cblas_header_compiles(self):
         source = r"""
