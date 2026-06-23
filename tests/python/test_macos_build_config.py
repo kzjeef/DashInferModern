@@ -13,6 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 class MacOSBuildConfigTest(unittest.TestCase):
 
+    def test_build_jobs_follow_apple_logical_cpu_count(self):
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn('build_jobs="${AS_BUILD_JOBS:-}"', build_script)
+        self.assertIn('sysctl -n hw.logicalcpu', build_script)
+        self.assertIn('--parallel "${build_jobs}"', build_script)
+
     def test_preset_is_cpu_only_apple_silicon(self):
         presets = json.loads(
             (REPO_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))

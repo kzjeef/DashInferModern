@@ -27,6 +27,7 @@ source_dir="$(pwd)"
 
 system_nv_lib="${AS_SYSTEM_NV_LIB:-OFF}"
 build_type="${AS_BUILD_TYPE:-Release}"
+build_jobs="${AS_BUILD_JOBS:-}"
 python_executable="${AS_PYTHON_EXECUTABLE:-}"
 cuda_static="${AS_CUDA_STATIC:-OFF}"
 build_package="${AS_BUILD_PACKAGE:-ON}"
@@ -34,6 +35,15 @@ enable_glibcxx11_abi="${AS_CXX11_ABI:-OFF}"
 build_hiednn="${AS_BUILD_HIEDNN:-ON}"
 enable_span_attn="${ENABLE_SPAN_ATTENTION:-ON}"
 enable_multinuma="${ENABLE_MULTINUMA:-OFF}"
+
+if [ -z "${build_jobs}" ]; then
+  if [ "${with_platform}" = "macos" ]; then
+    build_jobs="$(sysctl -n hw.logicalcpu)"
+  else
+    build_jobs=16
+  fi
+fi
+
 function clone_pull {
   GIT_URL=$1
   DIRECTORY=$2
@@ -207,7 +217,7 @@ elif [ "${with_platform}" == "macos" ]; then
 fi
 
 # Build through CMake so both Makefiles and Ninja presets work.
-cmake --build . --parallel 16 && cmake --install .
+cmake --build . --parallel "${build_jobs}" && cmake --install .
 
 
 if [ $? -eq 0 ]; then
