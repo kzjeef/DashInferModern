@@ -19,6 +19,12 @@ class MacOSBuildConfigTest(unittest.TestCase):
         self.assertIn('sysctl -n hw.logicalcpu', build_script)
         self.assertIn('--parallel "${build_jobs}"', build_script)
 
+    def test_native_build_checks_required_tools(self):
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn("for tool in brew cmake ninja", build_script)
+        self.assertIn('command -v "${tool}"', build_script)
+        self.assertIn("Missing macOS build tool", build_script)
+
     def test_preset_is_cpu_only_apple_silicon(self):
         presets = json.loads(
             (REPO_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))

@@ -160,6 +160,12 @@ elif [ "${with_platform}" == "macos" ]; then
     echo "AS_PLATFORM=macos requires Apple Silicon macOS" >&2
     exit 2
   fi
+  for tool in brew cmake ninja; do
+    if ! command -v "${tool}" >/dev/null 2>&1; then
+      echo "Missing macOS build tool: ${tool}" >&2
+      exit 2
+    fi
+  done
   if ! command -v xcrun >/dev/null 2>&1; then
     echo "AS_PLATFORM=macos requires Xcode command line tools" >&2
     exit 2
