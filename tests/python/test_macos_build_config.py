@@ -25,6 +25,19 @@ class MacOSBuildConfigTest(unittest.TestCase):
         self.assertIn('command -v "${tool}"', build_script)
         self.assertIn("Missing macOS build tool", build_script)
 
+    def test_deployment_target_is_explicit_and_overridable(self):
+        presets = json.loads(
+            (REPO_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+        macos = next(
+            item for item in presets["configurePresets"]
+            if item["name"] == "macos-arm")
+        self.assertEqual(
+            "13.0", macos["cacheVariables"]["CMAKE_OSX_DEPLOYMENT_TARGET"])
+
+        build_script = (REPO_ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn("AS_MACOS_DEPLOYMENT_TARGET:-13.0", build_script)
+        self.assertIn("-DCMAKE_OSX_DEPLOYMENT_TARGET=", build_script)
+
     def test_preset_is_cpu_only_apple_silicon(self):
         presets = json.loads(
             (REPO_ROOT / "CMakePresets.json").read_text(encoding="utf-8"))

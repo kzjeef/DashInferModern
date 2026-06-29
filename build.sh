@@ -29,6 +29,7 @@ system_nv_lib="${AS_SYSTEM_NV_LIB:-OFF}"
 build_type="${AS_BUILD_TYPE:-Release}"
 build_jobs="${AS_BUILD_JOBS:-}"
 python_executable="${AS_PYTHON_EXECUTABLE:-}"
+macos_deployment_target="${AS_MACOS_DEPLOYMENT_TARGET:-13.0}"
 cuda_static="${AS_CUDA_STATIC:-OFF}"
 build_package="${AS_BUILD_PACKAGE:-ON}"
 enable_glibcxx11_abi="${AS_CXX11_ABI:-OFF}"
@@ -198,6 +199,7 @@ elif [ "${with_platform}" == "macos" ]; then
       -DCMAKE_OSX_ARCHITECTURES=arm64 \
       -DCMAKE_OSX_SYSROOT="${macos_sdk_root}" \
       -DPYTHON_EXECUTABLE="${python_executable}" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="${macos_deployment_target}" \
       -DCMAKE_PREFIX_PATH="${homebrew_prefix};${homebrew_prefix}/opt/libomp" \
       -DBUILD_PACKAGE=OFF \
       -DCONFIG_ACCELERATOR_TYPE=NONE \
