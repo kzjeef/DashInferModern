@@ -109,6 +109,9 @@ class AsModelRuntimeConfigBuilder:
                     target_device = mapping[lower_str]
                 else:
                     raise ValueError(f"target device not supported: {target_device_str}")
+            else:
+                raise TypeError(
+                    "target_device must be a TargetDevice or device name")
 
         def helper_func(prefix: str, id_list: list):
             for id in id_list:

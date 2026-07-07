@@ -108,6 +108,11 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
 class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_invalid_target_device_type_has_clear_error(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        with self.assertRaisesRegex(TypeError, "target_device"):
+            builder.compute_unit(object())
+
     def test_builder_reset_preserves_lora_defaults(self):
         builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
         builder.build()
