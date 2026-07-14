@@ -55,6 +55,11 @@ class MacOSQwenMiniTest(unittest.TestCase):
         for binary_type in ("ADD", "MUL", "SWIGLU", "GEGLU"):
             self.assertIn(f"case BinaryType::{binary_type}", source)
 
+    def test_runtime_thread_count_accepts_auto_but_rejects_negative(self):
+        source = EXAMPLE.read_text(encoding="utf-8")
+        self.assertIn("if threads < 0:", source)
+        self.assertIn("use 0 for auto", source)
+
     @unittest.skipUnless(
         sys.platform == "darwin" and platform.machine() == "arm64",
         "requires Apple Silicon",

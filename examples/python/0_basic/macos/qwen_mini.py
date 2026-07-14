@@ -91,6 +91,8 @@ def run_qwen(output_dir, max_length, threads, seed):
     if max_length <= len(input_ids):
         raise ValueError(
             f"--max-length must be greater than {len(input_ids)}")
+    if threads < 0:
+        raise ValueError("--threads must be non-negative; use 0 for auto")
 
     engine = allspark.Engine()
     serialize_qwen(engine, output_dir, seed)
