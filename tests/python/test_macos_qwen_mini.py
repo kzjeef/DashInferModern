@@ -60,6 +60,13 @@ class MacOSQwenMiniTest(unittest.TestCase):
         self.assertIn("if threads < 0:", source)
         self.assertIn("use 0 for auto", source)
 
+    def test_engine_cleanup_tracks_installed_and_started_states(self):
+        source = EXAMPLE.read_text(encoding="utf-8")
+        self.assertIn("installed = False", source)
+        self.assertIn("started = False", source)
+        self.assertIn("if started:", source)
+        self.assertIn("if installed:", source)
+
     @unittest.skipUnless(
         sys.platform == "darwin" and platform.machine() == "arm64",
         "requires Apple Silicon",

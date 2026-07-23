@@ -109,10 +109,6 @@ def run_qwen(output_dir, max_length, threads, seed):
         .build()
     )
 
-    engine.install_model(runtime_config)
-    if engine.start_model(MODEL_NAME) != AsStatus.ALLSPARK_SUCCESS:
-        raise RuntimeError("failed to start Qwen mini")
-
     input_tensor = torch.tensor([input_ids], dtype=torch.int64)
     inputs = {
         "input_ids": torch.utils.dlpack.to_dlpack(input_tensor),
@@ -126,8 +122,16 @@ def run_qwen(output_dir, max_length, threads, seed):
         "repetition_penalty": 1.0,
     })
 
+    installed = False
+    started = False
     handle = None
     try:
+        engine.install_model(runtime_config)
+        installed = True
+        if engine.start_model(MODEL_NAME) != AsStatus.ALLSPARK_SUCCESS:
+            raise RuntimeError("failed to start Qwen mini")
+        started = True
+
         status, handle, queue = engine.start_request(
             MODEL_NAME, inputs, generation.build())
         if status != AsStatus.ALLSPARK_SUCCESS:
@@ -153,8 +157,10 @@ def run_qwen(output_dir, max_length, threads, seed):
     finally:
         if handle is not None:
             engine.release_request(MODEL_NAME, handle)
-        engine.stop_model(MODEL_NAME)
-        engine.release_model(MODEL_NAME)
+        if started:
+            engine.stop_model(MODEL_NAME)
+        if installed:
+            engine.release_model(MODEL_NAME)
 
 
 def main():
