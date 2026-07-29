@@ -5,6 +5,7 @@
 
 import argparse
 import tempfile
+import time
 from pathlib import Path
 
 import torch
@@ -86,13 +87,15 @@ def serialize_qwen(engine, output_dir, seed):
     )
 
 
-def run_qwen(output_dir, max_length, threads, seed):
+def run_qwen(output_dir, max_length, threads, seed, timeout_seconds):
     input_ids = [1, 2, 3, 4]
     if max_length <= len(input_ids):
         raise ValueError(
             f"--max-length must be greater than {len(input_ids)}")
     if threads < 0:
         raise ValueError("--threads must be non-negative; use 0 for auto")
+    if timeout_seconds <= 0:
+        raise ValueError("--timeout must be positive")
 
     engine = allspark.Engine()
     serialize_qwen(engine, output_dir, seed)
@@ -138,13 +141,18 @@ def run_qwen(output_dir, max_length, threads, seed):
             raise RuntimeError(f"failed to start Qwen mini request: {status}")
 
         generated_ids = []
+        deadline = time.monotonic() + timeout_seconds
         while queue.GenerateStatus() in (
                 GenerateRequestStatus.Init,
                 GenerateRequestStatus.Generating,
                 GenerateRequestStatus.ContextFinished):
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Qwen mini generation timed out")
             element = queue.Get()
             if element is not None:
                 generated_ids.extend(element.ids_from_generate)
+            else:
+                time.sleep(0.001)
 
         if queue.GenerateStatus() != GenerateRequestStatus.GenerateFinished:
             raise RuntimeError(
@@ -169,16 +177,19 @@ def main():
     parser.add_argument("--max-length", type=int, default=8)
     parser.add_argument("--threads", type=int, default=2)
     parser.add_argument("--seed", type=int, default=2025)
+    parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
 
     if args.output_dir is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         tokens = run_qwen(
-            args.output_dir, args.max_length, args.threads, args.seed)
+            args.output_dir, args.max_length, args.threads, args.seed,
+            args.timeout)
     else:
         with tempfile.TemporaryDirectory(prefix="dashinfer-qwen-mini-") as tmp:
             tokens = run_qwen(
-                Path(tmp), args.max_length, args.threads, args.seed)
+                Path(tmp), args.max_length, args.threads, args.seed,
+                args.timeout)
     print("PASS: Qwen mini GGML Q8_0 prefill/decode", tokens)
 
 

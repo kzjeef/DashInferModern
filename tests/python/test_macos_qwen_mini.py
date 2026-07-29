@@ -67,6 +67,13 @@ class MacOSQwenMiniTest(unittest.TestCase):
         self.assertIn("if started:", source)
         self.assertIn("if installed:", source)
 
+    def test_generation_wait_has_a_deadline(self):
+        source = EXAMPLE.read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--timeout"', source)
+        self.assertIn("deadline = time.monotonic() + timeout_seconds", source)
+        self.assertIn("raise TimeoutError", source)
+        self.assertIn("time.sleep(0.001)", source)
+
     @unittest.skipUnless(
         sys.platform == "darwin" and platform.machine() == "arm64",
         "requires Apple Silicon",
