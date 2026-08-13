@@ -133,6 +133,8 @@ class AsModelRuntimeConfigBuilder:
         elif target_device == TargetDevice.CPU:
             compute_unit_str = TargetDevice.CPU.name + ":0"
         elif target_device == TargetDevice.CPU_NUMA:
+            if len(device_id_array) == 0:
+                device_id_array = [0]
             compute_unit_str = TargetDevice.CPU.name + ":"
             compute_unit_str = helper_func(compute_unit_str, device_id_array)
         else:

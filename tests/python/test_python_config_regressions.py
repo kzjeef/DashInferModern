@@ -108,6 +108,15 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
 class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_empty_numa_device_list_defaults_to_node_zero(self):
+        config = (
+            RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+            .compute_unit(_FakeTargetDevice.CPU_NUMA, [])
+            .build()
+        )
+
+        self.assertEqual("CPU:0", config.compute_unit)
+
     def test_invalid_target_device_type_has_clear_error(self):
         builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
         with self.assertRaisesRegex(TypeError, "target_device"):
