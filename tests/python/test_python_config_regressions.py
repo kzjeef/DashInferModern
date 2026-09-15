@@ -108,6 +108,14 @@ class GenerationConfigBuilderRegressionTest(unittest.TestCase):
 
 class RuntimeConfigBuilderRegressionTest(unittest.TestCase):
 
+    def test_kv_cache_span_size_is_validated(self):
+        builder = RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()
+        builder.kv_cache_span_size("64")
+        self.assertEqual(64, builder.new_runtime_cfg.cache_span_size)
+
+        with self.assertRaisesRegex(ValueError, "one of 16"):
+            builder.kv_cache_span_size(48)
+
     def test_empty_numa_device_list_defaults_to_node_zero(self):
         config = (
             RUNTIME_CONFIG.AsModelRuntimeConfigBuilder()

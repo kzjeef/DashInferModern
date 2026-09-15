@@ -209,6 +209,13 @@ class AsModelRuntimeConfigBuilder:
         """
         Valid span_size is 16, 32, 64, and 128. Default is 32.
         """
+        try:
+            span_size = int(span_size)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid KV cache span size: {span_size!r}") from exc
+        if span_size not in (16, 32, 64, 128):
+            raise ValueError(
+                "KV cache span size must be one of 16, 32, 64, or 128")
         self.new_runtime_cfg.cache_span_size = span_size
         return self
 
